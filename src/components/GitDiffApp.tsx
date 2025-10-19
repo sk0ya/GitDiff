@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import git from "isomorphic-git";
-import type { WalkerEntry, TreeEntry, ReadCommitResult } from "isomorphic-git";
+import type { WalkerEntry, ReadCommitResult } from "isomorphic-git";
 import LightningFS from "@isomorphic-git/lightning-fs";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
