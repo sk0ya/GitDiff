@@ -18,7 +18,8 @@ export default function GitDiffApp() {
   const [selectedCommits, setSelectedCommits] = useState<string[]>([]);
   const [diff, setDiff] = useState<DiffItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [depth, setDepth] = useState<number>(50);
+  const [repoFolderName, setRepoFolderName] = useState<string>("");
+  const [currentBranch, setCurrentBranch] = useState<string>("");
 
   // 初期化
   useEffect(() => {
@@ -37,7 +38,7 @@ export default function GitDiffApp() {
     try {
       // .gitディレクトリ内のファイルをLightningFSにコピー
       const files = Array.from(e.target.files);
-      console.log(`アップロード開始: ${files.length} ファイル`);
+      console.log(`.gitフォルダ読み込み開始: ${files.length} ファイル`);
 
       if (files.length === 0) {
         throw new Error('ファイルが選択されていません');
@@ -57,6 +58,18 @@ export default function GitDiffApp() {
       // プレフィックスを取得（例: "GitDiff/" の部分）
       const prefix = firstPath.substring(0, gitIndex);
       console.log('プレフィックス:', prefix);
+
+      // リポジトリフォルダ名を取得（末尾のスラッシュを除去）
+      const folderName = prefix.slice(0, -1) || "リポジトリ";
+      setRepoFolderName(folderName);
+
+      // .gitフォルダ内にHEADファイルがあるか確認
+      const hasHeadFile = files.some(file =>
+        file.webkitRelativePath === prefix + '.git/HEAD'
+      );
+      if (!hasHeadFile) {
+        throw new Error('有効な.gitフォルダではありません（HEADファイルが見つかりません）');
+      }
 
       // 必要なファイルのみをフィルタリング（コミット履歴とdiffに必要な最小限）
       const filteredFiles = files.filter(file => {
@@ -93,7 +106,7 @@ export default function GitDiffApp() {
         return false;
       });
 
-      console.log(`フィルタリング結果: ${filteredFiles.length}/${files.length} ファイル (${Math.round(filteredFiles.length/files.length*100)}%)`);
+      console.log(`必要なファイル: ${filteredFiles.length}/${files.length} (${Math.round(filteredFiles.length/files.length*100)}%)`);
 
       // 必要なディレクトリを事前に収集
       const directories = new Set<string>();
@@ -134,7 +147,7 @@ export default function GitDiffApp() {
 
       // ファイルを並列処理（バッチサイズ200で制御）
       const BATCH_SIZE = 200;
-      console.log(`ファイル書き込み開始: ${filePaths.length} ファイル`);
+      console.log(`.gitファイル書き込み中: ${filePaths.length} ファイル`);
 
       for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
         const batch = filePaths.slice(i, i + BATCH_SIZE);
@@ -146,7 +159,7 @@ export default function GitDiffApp() {
             return null;
           })
         );
-        console.log(`処理完了: ${Math.min(i + BATCH_SIZE, filePaths.length)}/${filePaths.length}`);
+        console.log(`書き込み進捗: ${Math.min(i + BATCH_SIZE, filePaths.length)}/${filePaths.length}`);
 
         // バッチ処理後にGCを促す（ブラウザ依存だが試す価値あり）
         if (i % (BATCH_SIZE * 5) === 0 && typeof (globalThis as any).gc === 'function') {
@@ -157,11 +170,29 @@ export default function GitDiffApp() {
       // 全てのファイル参照を解放
       filePaths.length = 0;
 
-      console.log('ファイルコピー完了、コミット履歴を取得中...');
-      console.log('dirパス:', dir);
+      console.log('.gitファイル読み込み完了、コミット履歴を解析中...');
 
-      // コミット履歴を取得（depth制限付き）
-      const logs = await git.log({ fs, dir, depth });
+      // HEADファイルからブランチ名を取得
+      try {
+        const headContent = await fs.readFile('/repo/.git/HEAD', { encoding: 'utf8' });
+        const headStr = typeof headContent === 'string' ? headContent : new TextDecoder().decode(headContent as Uint8Array);
+        console.log('HEAD内容:', headStr);
+
+        // "ref: refs/heads/main" の形式から "main" を抽出
+        const match = headStr.trim().match(/^ref: refs\/heads\/(.+)$/);
+        if (match) {
+          setCurrentBranch(match[1]);
+        } else {
+          // detached HEADの場合
+          setCurrentBranch('(detached HEAD)');
+        }
+      } catch (e) {
+        console.error('ブランチ名の取得に失敗:', e);
+        setCurrentBranch('(不明)');
+      }
+
+      // コミット履歴を取得
+      const logs = await git.log({ fs, dir });
       console.log(`コミット履歴取得完了: ${logs.length} コミット`);
       setCommits(logs);
     } catch (e: any) {
@@ -282,65 +313,57 @@ export default function GitDiffApp() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Git Diff ZIP Exporter</h1>
-
-      <div className="bg-white border-2 border-gray-200 rounded-lg p-6 mb-6 shadow-sm">
-        <div className="flex items-end gap-6">
-          <div className="flex-shrink-0">
-            <label className="block mb-2 font-semibold text-gray-700">
-              取得するコミット履歴の件数
-            </label>
-            <input
-              type="number"
-              min="1"
-              max="1000"
-              value={depth}
-              onChange={(e) => setDepth(parseInt(e.target.value) || 50)}
-              className="border-2 border-gray-300 rounded p-2 w-32 focus:border-blue-500 focus:outline-none"
-            />
-            <p className="text-xs text-gray-500 mt-1">デフォルト: 50件</p>
-          </div>
-
-          <div className="flex-1">
-            <label className="block mb-2 font-semibold text-gray-700">
-              リポジトリの .git ディレクトリを選択
-            </label>
-            <input
-              type="file"
-              // @ts-ignore - webkitdirectory is not in the type definition
-              webkitdirectory=""
-              directory=""
-              onChange={handleDirectoryUpload}
-              className="border-2 border-gray-300 rounded p-2 w-full focus:border-blue-500 focus:outline-none"
-            />
-          </div>
+    <div className="max-w-7xl mx-auto p-4">
+      <div className="flex items-center justify-between mb-3 text-sm">
+        <h1 className="text-lg font-bold text-gray-800">Git Diff ZIP Exporter</h1>
+        <div className="flex items-center gap-3">
+          <input
+            type="file"
+            // @ts-ignore - webkitdirectory is not in the type definition
+            webkitdirectory=""
+            directory=""
+            onChange={handleDirectoryUpload}
+            className="text-sm border border-gray-300 rounded px-3 py-1 focus:ring-1 focus:ring-blue-500 outline-none file:mr-2 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+          />
+          {commits.length > 0 && (
+            <>
+              <div className="h-4 w-px bg-gray-300"></div>
+              <span className="text-gray-500">リポジトリ: <span className="font-semibold text-gray-800">{repoFolderName}</span></span>
+              <div className="h-4 w-px bg-gray-300"></div>
+              <span className="text-gray-500">ブランチ: <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-medium">{currentBranch}</span></span>
+            </>
+          )}
         </div>
-        {loading && (
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-blue-700 font-semibold">
-            読み込み中...
-          </div>
-        )}
       </div>
 
+      {loading && (
+        <div className="mb-3 p-2 bg-blue-50 border-l-2 border-blue-500 text-blue-700 text-sm flex items-center gap-2">
+          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          読み込み中...
+        </div>
+      )}
+
       {commits.length === 0 && !loading && (
-        <p className="text-gray-500">リポジトリの .git フォルダを選択してください</p>
+        <p className="text-sm text-gray-500">リポジトリの .git フォルダを選択してください</p>
       )}
 
       {commits.length > 0 && (
         <>
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold mb-2">コミット履歴</h2>
-            <p className="text-sm text-gray-600 mb-3">
-              比較したい2つのコミットを選択してください
+
+          <div className="bg-white border border-gray-200 rounded overflow-hidden mb-3">
+            <div className="flex items-center justify-between bg-gray-50 border-b border-gray-200 px-3 py-2">
+              <h2 className="text-sm font-semibold text-gray-700">コミット履歴 - 比較したい2つのコミットを選択してください</h2>
               {selectedCommits.length > 0 && (
-                <span className="ml-2 font-semibold text-blue-600">
-                  ({selectedCommits.length}/2 選択中)
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-semibold">
+                  {selectedCommits.length}/2 選択中
                 </span>
               )}
-            </p>
-            <div className="border rounded-lg overflow-hidden">
-              <div className="bg-gray-100 grid grid-cols-11 gap-2 p-3 font-semibold text-sm border-b">
+            </div>
+            <div className="overflow-hidden">
+              <div className="bg-gray-100 grid grid-cols-11 gap-2 px-3 py-1.5 text-xs text-gray-600 font-medium border-b border-gray-200">
                 <div className="col-span-1 text-center">選択</div>
                 <div className="col-span-5">コミットメッセージ</div>
                 <div className="col-span-2">作成者</div>
@@ -382,13 +405,13 @@ export default function GitDiffApp() {
                     <div
                       key={c.oid}
                       onClick={() => handleCommitToggle(c.oid)}
-                      className={`grid grid-cols-11 gap-2 p-3 border-b hover:bg-gray-50 transition-colors cursor-pointer ${
+                      className={`grid grid-cols-11 gap-2 px-3 py-1.5 border-b last:border-b-0 hover:bg-gray-50 transition cursor-pointer text-sm ${
                         isSelected
                           ? isOld
-                            ? 'bg-blue-100 border-l-4 border-l-blue-600'
+                            ? 'bg-blue-50 border-l-2 border-l-blue-500'
                             : isNew
-                            ? 'bg-green-100 border-l-4 border-l-green-600'
-                            : 'bg-gray-100 border-l-4 border-l-gray-400'
+                            ? 'bg-emerald-50 border-l-2 border-l-emerald-500'
+                            : 'bg-gray-50 border-l-2 border-l-gray-400'
                           : ''
                       }`}
                     >
@@ -398,27 +421,25 @@ export default function GitDiffApp() {
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => handleCommitToggle(c.oid)}
-                            className="w-5 h-5 cursor-pointer"
+                            className="w-3.5 h-3.5 cursor-pointer"
                             onClick={(e) => e.stopPropagation()}
                           />
                           {isSelected && selectionLabel && (
-                            <span className={`absolute -top-1 -right-6 text-xs font-bold px-1 rounded ${
-                              isOld ? 'text-blue-600' : 'text-green-600'
+                            <span className={`absolute -top-1 -right-6 text-[10px] font-bold px-1 py-0.5 rounded ${
+                              isOld ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'
                             }`}>
                               {selectionLabel}
                             </span>
                           )}
                         </div>
                       </div>
-                      <div className="col-span-5 text-sm">
-                        <div className="font-medium truncate" title={c.commit.message}>
-                          {c.commit.message.split('\n')[0]}
-                        </div>
+                      <div className="col-span-5 truncate" title={c.commit.message}>
+                        {c.commit.message.split('\n')[0]}
                       </div>
-                      <div className="col-span-2 text-sm text-gray-600 truncate" title={c.commit.author.name}>
+                      <div className="col-span-2 text-gray-600 truncate" title={c.commit.author.name}>
                         {c.commit.author.name}
                       </div>
-                      <div className="col-span-2 text-sm text-gray-600">
+                      <div className="col-span-2 text-gray-600 text-xs">
                         {date.toLocaleString('ja-JP', {
                           year: 'numeric',
                           month: '2-digit',
@@ -437,19 +458,8 @@ export default function GitDiffApp() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4 mb-6">
-            <button
-              onClick={handleDiff}
-              disabled={selectedCommits.length !== 2}
-              className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
-                selectedCommits.length === 2
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              差分を表示して ZIP 出力
-            </button>
-            {selectedCommits.length === 2 && (() => {
+          <div className="flex items-center justify-between bg-white border border-gray-200 rounded px-3 py-2 mb-3">
+            {selectedCommits.length === 2 ? (() => {
               const commit1 = commits.find(c => c.oid === selectedCommits[0]);
               const commit2 = commits.find(c => c.oid === selectedCommits[1]);
 
@@ -460,27 +470,49 @@ export default function GitDiffApp() {
                 : [commit2, commit1];
 
               return (
-                <div className="text-sm text-gray-600">
-                  <span className="font-semibold text-blue-600">Old: {oldCommit.commit.message.split('\n')[0].slice(0, 25)}...</span>
-                  {' → '}
-                  <span className="font-semibold text-green-600">New: {newCommit.commit.message.split('\n')[0].slice(0, 25)}...</span>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-xs px-1.5 py-0.5 bg-blue-500 text-white rounded font-bold">OLD</span>
+                  <span className="text-gray-700 truncate max-w-xs">{oldCommit.commit.message.split('\n')[0]}</span>
+                  <span className="text-gray-400">→</span>
+                  <span className="text-xs px-1.5 py-0.5 bg-emerald-500 text-white rounded font-bold">NEW</span>
+                  <span className="text-gray-700 truncate max-w-xs">{newCommit.commit.message.split('\n')[0]}</span>
                 </div>
               );
-            })()}
+            })() : <span className="text-sm text-gray-500">2つのコミットを選択してください</span>}
+            <button
+              onClick={handleDiff}
+              disabled={selectedCommits.length !== 2}
+              className={`px-4 py-1.5 rounded font-medium text-sm transition flex items-center gap-1.5 ${
+                selectedCommits.length === 2
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              ZIP出力
+            </button>
           </div>
 
           {diff.length > 0 && (
-            <div className="mt-6">
-              <h3 className="font-semibold mb-2">変更されたファイル ({diff.length}件):</h3>
-              <div className="border rounded-lg max-h-64 overflow-y-auto">
+            <div className="bg-white border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center gap-2 bg-gray-50 border-b border-gray-200 px-3 py-1.5">
+                <h3 className="text-sm font-semibold text-gray-700">変更されたファイル</h3>
+                <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-xs font-bold">
+                  {diff.length}
+                </span>
+              </div>
+              <div className="max-h-64 overflow-y-auto">
                 {diff.map((d) => (
-                  <div key={d.path} className="border-b last:border-b-0 p-2 hover:bg-gray-50">
-                    <span className={`inline-block px-2 py-1 rounded text-xs font-semibold mr-2 ${
-                      d.status === 'modified' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'
-                    }`}>
-                      {d.status}
-                    </span>
-                    <span className="text-sm">{d.path}</span>
+                  <div key={d.path} className="border-b last:border-b-0 px-3 py-1.5 hover:bg-gray-50 transition">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${
+                        d.status === 'modified'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {d.status}
+                      </span>
+                      <span className="text-gray-700 font-mono">{d.path}</span>
+                    </div>
                   </div>
                 ))}
               </div>
