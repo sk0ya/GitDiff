@@ -57,8 +57,32 @@ export default function GitDiffApp() {
       const prefix = firstPath.substring(0, gitIndex);
       console.log('プレフィックス:', prefix);
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      // 必要なファイルのみをフィルタリング
+      const filteredFiles = files.filter(file => {
+        const relativePath = file.webkitRelativePath;
+        // プレフィックスを除いた.git以降のパスを取得
+        const gitPath = relativePath.substring(prefix.length);
+
+        // 除外: hooks, info, logs, index, COMMIT_EDITMSG, FETCH_HEAD, description など
+        if (gitPath.startsWith('.git/hooks/') ||
+            gitPath.startsWith('.git/info/') ||
+            gitPath.startsWith('.git/logs/') ||
+            gitPath === '.git/index' ||
+            gitPath === '.git/COMMIT_EDITMSG' ||
+            gitPath === '.git/FETCH_HEAD' ||
+            gitPath === '.git/ORIG_HEAD' ||
+            gitPath === '.git/description') {
+          return false;
+        }
+
+        // 必要なファイル: HEAD, config, objects/**, refs/**, packed-refs など
+        return gitPath.startsWith('.git/');
+      });
+
+      console.log(`フィルタリング結果: ${filteredFiles.length}/${files.length} ファイル (${Math.round(filteredFiles.length/files.length*100)}%)`);
+
+      for (let i = 0; i < filteredFiles.length; i++) {
+        const file = filteredFiles[i];
         let path = file.webkitRelativePath;
 
         // プレフィックスを削除して /repo 配下に配置
@@ -69,7 +93,7 @@ export default function GitDiffApp() {
         path = '/repo/' + path;
 
         if (i % 100 === 0) {
-          console.log(`処理中: ${i}/${files.length} - ${path}`);
+          console.log(`処理中: ${i}/${filteredFiles.length} - ${path}`);
         }
 
         const dirPath = path.substring(0, path.lastIndexOf('/'));
