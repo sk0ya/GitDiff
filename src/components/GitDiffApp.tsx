@@ -28,7 +28,161 @@ export default function GitDiffApp() {
     setFs(pfs);
   }, []);
 
-  // ディレクトリをアップロードして読み込む
+  // File System Access APIを使用してディレクトリを読み込む
+  async function handleDirectoryPickerClick() {
+    if (!fs) return;
+
+    // File System Access API対応チェック
+    if (!('showDirectoryPicker' in window)) {
+      alert('このブラウザはFile System Access APIに対応していません。Chromeなどのモダンブラウザをご使用ください。');
+      return;
+    }
+
+    setLoading(true);
+    const dir = "/repo";
+
+    try {
+      // フォルダピッカーを表示（.gitフォルダを選択してもらう）
+      const dirHandle = await (window as any).showDirectoryPicker({
+        mode: 'read',
+      });
+
+      console.log('選択されたフォルダ:', dirHandle.name);
+
+      // フォルダ名を設定（.gitフォルダの親フォルダ名を取得したいが、APIの制限で直接取得できないため、選択されたフォルダ名を使用）
+      setRepoFolderName(dirHandle.name === '.git' ? 'リポジトリ' : dirHandle.name);
+
+      // .git フォルダかどうかを確認（HEADファイルの存在チェック）
+      let isGitFolder = false;
+      try {
+        await dirHandle.getFileHandle('HEAD');
+        isGitFolder = true;
+      } catch {
+        // HEADファイルが見つからない場合は .git サブフォルダを探す
+      }
+
+      const gitDirHandle = isGitFolder ? dirHandle : await dirHandle.getDirectoryHandle('.git');
+
+      // 必要なファイルを再帰的に収集
+      const filesToProcess: Array<{ handle: any; path: string }> = [];
+      const directories = new Set<string>();
+
+      async function collectFiles(dirHandle: any, basePath: string) {
+        for await (const entry of dirHandle.values()) {
+          const fullPath = basePath + '/' + entry.name;
+
+          if (entry.kind === 'file') {
+            // 必要なファイルのみをフィルタリング
+            if (
+              fullPath === '/.git/HEAD' ||
+              fullPath === '/.git/config' ||
+              fullPath === '/.git/packed-refs' ||
+              fullPath.startsWith('/.git/refs/') ||
+              (fullPath.startsWith('/.git/objects/') && !fullPath.startsWith('/.git/objects/info/'))
+            ) {
+              filesToProcess.push({ handle: entry, path: '/repo' + fullPath });
+
+              // ディレクトリパスを収集
+              const dirPath = ('/repo' + fullPath).substring(0, ('/repo' + fullPath).lastIndexOf('/'));
+              const dirs = dirPath.split('/').filter(Boolean);
+              let currentPath = '';
+              for (const d of dirs) {
+                currentPath += '/' + d;
+                directories.add(currentPath);
+              }
+            }
+          } else if (entry.kind === 'directory') {
+            // 必要なディレクトリのみ再帰
+            if (
+              fullPath === '/.git/refs' ||
+              fullPath.startsWith('/.git/refs/') ||
+              fullPath === '/.git/objects' ||
+              (fullPath.startsWith('/.git/objects/') && !fullPath.startsWith('/.git/objects/info/'))
+            ) {
+              await collectFiles(entry, fullPath);
+            }
+          }
+        }
+      }
+
+      console.log('.gitフォルダ内のファイルを収集中...');
+      await collectFiles(gitDirHandle, '/.git');
+      console.log(`収集完了: ${filesToProcess.length} ファイル`);
+
+      // ディレクトリを事前に一括作成
+      console.log(`ディレクトリ作成中: ${directories.size} 個`);
+      const sortedDirs = Array.from(directories).sort();
+      for (const dir of sortedDirs) {
+        try {
+          await fs.mkdir(dir);
+        } catch (e) {
+          // ディレクトリが既に存在する場合は無視
+        }
+      }
+
+      // ファイルを並列処理（バッチサイズ200で制御）
+      const BATCH_SIZE = 200;
+      console.log(`.gitファイル書き込み中: ${filesToProcess.length} ファイル`);
+
+      for (let i = 0; i < filesToProcess.length; i += BATCH_SIZE) {
+        const batch = filesToProcess.slice(i, i + BATCH_SIZE);
+        await Promise.all(
+          batch.map(async ({ handle, path }) => {
+            const fileHandle = await handle.getFile();
+            const content = await fileHandle.arrayBuffer();
+            await fs.writeFile(path, new Uint8Array(content));
+            return null;
+          })
+        );
+        console.log(`書き込み進捗: ${Math.min(i + BATCH_SIZE, filesToProcess.length)}/${filesToProcess.length}`);
+
+        // バッチ処理後にGCを促す
+        if (i % (BATCH_SIZE * 5) === 0 && typeof (globalThis as any).gc === 'function') {
+          (globalThis as any).gc();
+        }
+      }
+
+      // 全てのファイル参照を解放
+      filesToProcess.length = 0;
+
+      console.log('.gitファイル読み込み完了、コミット履歴を解析中...');
+
+      // HEADファイルからブランチ名を取得
+      try {
+        const headContent = await fs.readFile('/repo/.git/HEAD', { encoding: 'utf8' });
+        const headStr = typeof headContent === 'string' ? headContent : new TextDecoder().decode(headContent as Uint8Array);
+        console.log('HEAD内容:', headStr);
+
+        // "ref: refs/heads/main" の形式から "main" を抽出
+        const match = headStr.trim().match(/^ref: refs\/heads\/(.+)$/);
+        if (match) {
+          setCurrentBranch(match[1]);
+        } else {
+          // detached HEADの場合
+          setCurrentBranch('(detached HEAD)');
+        }
+      } catch (e) {
+        console.error('ブランチ名の取得に失敗:', e);
+        setCurrentBranch('(不明)');
+      }
+
+      // コミット履歴を取得
+      const logs = await git.log({ fs, dir });
+      console.log(`コミット履歴取得完了: ${logs.length} コミット`);
+      setCommits(logs);
+    } catch (e: any) {
+      if (e.name === 'AbortError') {
+        console.log('ユーザーがキャンセルしました');
+      } else {
+        alert("エラー: " + e.message);
+        console.error(e);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // レガシーブラウザ向けのフォールバック（従来のinput[type=file]方式）
   async function handleDirectoryUpload(e: React.ChangeEvent<HTMLInputElement>) {
     if (!e.target.files || !fs) return;
 
@@ -45,7 +199,6 @@ export default function GitDiffApp() {
       }
 
       // 最初のファイルのパスから基準ディレクトリを取得
-      // 例: "GitDiff/.git/HEAD" → "GitDiff/.git" を除去して "/repo/.git" にマッピング
       const firstPath = files[0].webkitRelativePath;
       console.log('最初のファイルパス:', firstPath);
 
@@ -55,11 +208,11 @@ export default function GitDiffApp() {
         throw new Error('.gitディレクトリを選択してください');
       }
 
-      // プレフィックスを取得（例: "GitDiff/" の部分）
+      // プレフィックスを取得
       const prefix = firstPath.substring(0, gitIndex);
       console.log('プレフィックス:', prefix);
 
-      // リポジトリフォルダ名を取得（末尾のスラッシュを除去）
+      // リポジトリフォルダ名を取得
       const folderName = prefix.slice(0, -1) || "リポジトリ";
       setRepoFolderName(folderName);
 
@@ -71,18 +224,10 @@ export default function GitDiffApp() {
         throw new Error('有効な.gitフォルダではありません（HEADファイルが見つかりません）');
       }
 
-      // 必要なファイルのみをフィルタリング（コミット履歴とdiffに必要な最小限）
+      // 必要なファイルのみをフィルタリング
       const filteredFiles = files.filter(file => {
         const relativePath = file.webkitRelativePath;
-        // プレフィックスを除いた.git以降のパスを取得
         const gitPath = relativePath.substring(prefix.length);
-
-        // 必要なファイルのみを許可リストで指定
-        // - HEAD: 現在のブランチ参照
-        // - config: リポジトリ設定
-        // - refs/**: ブランチとタグの参照
-        // - packed-refs: パックされた参照
-        // - objects/**: コミット、ツリー、ブロブオブジェクト
 
         if (gitPath === '.git/HEAD' ||
             gitPath === '.git/config' ||
@@ -95,8 +240,6 @@ export default function GitDiffApp() {
         }
 
         if (gitPath.startsWith('.git/objects/')) {
-          // objects内でも不要なものを除外
-          // info/や pack/*.idx などは除外可能
           if (gitPath.startsWith('.git/objects/info/')) {
             return false;
           }
@@ -131,9 +274,6 @@ export default function GitDiffApp() {
         filePaths.push({ file, path });
       }
 
-      // filteredFilesを解放（もう使わない）
-      (filteredFiles as any).length = 0;
-
       // ディレクトリを事前に一括作成
       console.log(`ディレクトリ作成中: ${directories.size} 個`);
       const sortedDirs = Array.from(directories).sort();
@@ -145,7 +285,7 @@ export default function GitDiffApp() {
         }
       }
 
-      // ファイルを並列処理（バッチサイズ200で制御）
+      // ファイルを並列処理
       const BATCH_SIZE = 200;
       console.log(`.gitファイル書き込み中: ${filePaths.length} ファイル`);
 
@@ -155,19 +295,16 @@ export default function GitDiffApp() {
           batch.map(async ({ file, path }) => {
             const content = await file.arrayBuffer();
             await fs.writeFile(path, new Uint8Array(content));
-            // ArrayBufferを明示的に解放
             return null;
           })
         );
         console.log(`書き込み進捗: ${Math.min(i + BATCH_SIZE, filePaths.length)}/${filePaths.length}`);
 
-        // バッチ処理後にGCを促す（ブラウザ依存だが試す価値あり）
         if (i % (BATCH_SIZE * 5) === 0 && typeof (globalThis as any).gc === 'function') {
           (globalThis as any).gc();
         }
       }
 
-      // 全てのファイル参照を解放
       filePaths.length = 0;
 
       console.log('.gitファイル読み込み完了、コミット履歴を解析中...');
@@ -178,12 +315,10 @@ export default function GitDiffApp() {
         const headStr = typeof headContent === 'string' ? headContent : new TextDecoder().decode(headContent as Uint8Array);
         console.log('HEAD内容:', headStr);
 
-        // "ref: refs/heads/main" の形式から "main" を抽出
         const match = headStr.trim().match(/^ref: refs\/heads\/(.+)$/);
         if (match) {
           setCurrentBranch(match[1]);
         } else {
-          // detached HEADの場合
           setCurrentBranch('(detached HEAD)');
         }
       } catch (e) {
@@ -317,14 +452,25 @@ export default function GitDiffApp() {
       <div className="flex items-center justify-between mb-3 text-sm">
         <h1 className="text-lg font-bold text-gray-800">Git Diff ZIP Exporter</h1>
         <div className="flex items-center gap-3">
-          <input
-            type="file"
-            // @ts-ignore - webkitdirectory is not in the type definition
-            webkitdirectory=""
-            directory=""
-            onChange={handleDirectoryUpload}
-            className="text-sm border border-gray-300 rounded px-3 py-1 focus:ring-1 focus:ring-blue-500 outline-none file:mr-2 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-          />
+          {/* File System Access API対応ブラウザ向けボタン */}
+          {'showDirectoryPicker' in window ? (
+            <button
+              onClick={handleDirectoryPickerClick}
+              className="text-sm border border-gray-300 rounded px-3 py-1.5 bg-white hover:bg-gray-50 focus:ring-1 focus:ring-blue-500 outline-none font-medium text-gray-700 transition"
+            >
+              📁 リポジトリフォルダを選択
+            </button>
+          ) : (
+            /* レガシーブラウザ向けフォールバック */
+            <input
+              type="file"
+              // @ts-ignore - webkitdirectory is not in the type definition
+              webkitdirectory=""
+              directory=""
+              onChange={handleDirectoryUpload}
+              className="text-sm border border-gray-300 rounded px-3 py-1 focus:ring-1 focus:ring-blue-500 outline-none file:mr-2 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            />
+          )}
           {commits.length > 0 && (
             <>
               <div className="h-4 w-px bg-gray-300"></div>
