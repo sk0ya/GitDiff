@@ -169,49 +169,50 @@ export default function GitDiffApp() {
     const valid = changes.filter((item: DiffItem | undefined): item is DiffItem => item !== undefined && item !== null);
     setDiff(valid);
 
-    // ZIPを生成してダウンロード
-    const oldZip = await createZip(oldCommit);
-    const newZip = await createZip(newCommit);
-    saveAs(await oldZip.generateAsync({ type: "blob" }), "old_version.zip");
-    saveAs(await newZip.generateAsync({ type: "blob" }), "new_version.zip");
-  }
+    // 1つのZIPファイルに変更前と変更後を含める（差分があるファイルのみ）
+    const diffZip = new JSZip();
 
-  async function createZip(oid: string): Promise<JSZip> {
-    if (!fs) throw new Error("FS not initialized");
+    // 変更前フォルダを作成
+    const oldFolder = diffZip.folder("変更前");
+    if (!oldFolder) throw new Error("Failed to create old folder");
 
-    const zip = new JSZip();
-    const dir = "/repo";
-    const tree = await git.readTree({ fs, dir, oid });
-    const filesFolder = zip.folder("files");
-    if (!filesFolder) throw new Error("Failed to create folder");
+    // 変更後フォルダを作成
+    const newFolder = diffZip.folder("変更後");
+    if (!newFolder) throw new Error("Failed to create new folder");
 
-    await addTreeToZip(dir, tree.tree, filesFolder);
-    return zip;
-  }
+    // 差分があるファイルのみをZIPに追加
+    for (const item of valid) {
+      const filepath = item.path;
 
-  async function addTreeToZip(baseDir: string, treeEntries: TreeEntry[], zipFolder: JSZip): Promise<void> {
-    if (!fs) return;
-
-    for (const entry of treeEntries) {
-      if (entry.type === "tree") {
-        const subtree = await git.readTree({
+      // 変更前のファイルを取得（削除されていない場合）
+      try {
+        const oldBlob = await git.readBlob({
           fs,
-          dir: baseDir,
-          oid: entry.oid,
+          dir,
+          oid: oldCommit,
+          filepath,
         });
-        const subFolder = zipFolder.folder(entry.path);
-        if (subFolder) {
-          await addTreeToZip(baseDir, subtree.tree, subFolder);
-        }
-      } else if (entry.type === "blob") {
-        const blob = await git.readBlob({
+        oldFolder.file(filepath, oldBlob.blob);
+      } catch (e) {
+        // ファイルが存在しない（追加されたファイル）場合はスキップ
+      }
+
+      // 変更後のファイルを取得（削除されていない場合）
+      try {
+        const newBlob = await git.readBlob({
           fs,
-          dir: baseDir,
-          oid: entry.oid,
+          dir,
+          oid: newCommit,
+          filepath,
         });
-        zipFolder.file(entry.path, blob.blob);
+        newFolder.file(filepath, newBlob.blob);
+      } catch (e) {
+        // ファイルが存在しない（削除されたファイル）場合はスキップ
       }
     }
+
+    // 1つのZIPファイルとしてダウンロード
+    saveAs(await diffZip.generateAsync({ type: "blob" }), "diff.zip");
   }
 
   return (
