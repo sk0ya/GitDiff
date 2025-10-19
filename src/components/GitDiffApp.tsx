@@ -18,6 +18,7 @@ export default function GitDiffApp() {
   const [selectedCommits, setSelectedCommits] = useState<string[]>([]);
   const [diff, setDiff] = useState<DiffItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [depth, setDepth] = useState<number>(50);
 
   // 初期化
   useEffect(() => {
@@ -57,69 +58,110 @@ export default function GitDiffApp() {
       const prefix = firstPath.substring(0, gitIndex);
       console.log('プレフィックス:', prefix);
 
-      // 必要なファイルのみをフィルタリング
+      // 必要なファイルのみをフィルタリング（コミット履歴とdiffに必要な最小限）
       const filteredFiles = files.filter(file => {
         const relativePath = file.webkitRelativePath;
         // プレフィックスを除いた.git以降のパスを取得
         const gitPath = relativePath.substring(prefix.length);
 
-        // 除外: hooks, info, logs, index, COMMIT_EDITMSG, FETCH_HEAD, description など
-        if (gitPath.startsWith('.git/hooks/') ||
-            gitPath.startsWith('.git/info/') ||
-            gitPath.startsWith('.git/logs/') ||
-            gitPath === '.git/index' ||
-            gitPath === '.git/COMMIT_EDITMSG' ||
-            gitPath === '.git/FETCH_HEAD' ||
-            gitPath === '.git/ORIG_HEAD' ||
-            gitPath === '.git/description') {
-          return false;
+        // 必要なファイルのみを許可リストで指定
+        // - HEAD: 現在のブランチ参照
+        // - config: リポジトリ設定
+        // - refs/**: ブランチとタグの参照
+        // - packed-refs: パックされた参照
+        // - objects/**: コミット、ツリー、ブロブオブジェクト
+
+        if (gitPath === '.git/HEAD' ||
+            gitPath === '.git/config' ||
+            gitPath === '.git/packed-refs') {
+          return true;
         }
 
-        // 必要なファイル: HEAD, config, objects/**, refs/**, packed-refs など
-        return gitPath.startsWith('.git/');
+        if (gitPath.startsWith('.git/refs/')) {
+          return true;
+        }
+
+        if (gitPath.startsWith('.git/objects/')) {
+          // objects内でも不要なものを除外
+          // info/や pack/*.idx などは除外可能
+          if (gitPath.startsWith('.git/objects/info/')) {
+            return false;
+          }
+          return true;
+        }
+
+        return false;
       });
 
       console.log(`フィルタリング結果: ${filteredFiles.length}/${files.length} ファイル (${Math.round(filteredFiles.length/files.length*100)}%)`);
 
-      for (let i = 0; i < filteredFiles.length; i++) {
-        const file = filteredFiles[i];
-        let path = file.webkitRelativePath;
+      // 必要なディレクトリを事前に収集
+      const directories = new Set<string>();
+      const filePaths: Array<{ file: File; path: string }> = [];
 
-        // プレフィックスを削除して /repo 配下に配置
-        // 例: "GitDiff/.git/HEAD" → "/repo/.git/HEAD"
+      for (const file of filteredFiles) {
+        let path = file.webkitRelativePath;
         if (path.startsWith(prefix)) {
           path = path.substring(prefix.length);
         }
         path = '/repo/' + path;
 
-        if (i % 100 === 0) {
-          console.log(`処理中: ${i}/${filteredFiles.length} - ${path}`);
-        }
-
+        // ディレクトリパスを収集
         const dirPath = path.substring(0, path.lastIndexOf('/'));
-
-        // ディレクトリを作成
         const dirs = dirPath.split('/').filter(Boolean);
         let currentPath = '';
         for (const d of dirs) {
           currentPath += '/' + d;
-          try {
-            await fs.mkdir(currentPath);
-          } catch (e) {
-            // ディレクトリが既に存在する場合は無視
-          }
+          directories.add(currentPath);
         }
 
-        // ファイルを読み込んで書き込む
-        const content = await file.arrayBuffer();
-        await fs.writeFile(path, new Uint8Array(content));
+        filePaths.push({ file, path });
       }
+
+      // filteredFilesを解放（もう使わない）
+      (filteredFiles as any).length = 0;
+
+      // ディレクトリを事前に一括作成
+      console.log(`ディレクトリ作成中: ${directories.size} 個`);
+      const sortedDirs = Array.from(directories).sort();
+      for (const dir of sortedDirs) {
+        try {
+          await fs.mkdir(dir);
+        } catch (e) {
+          // ディレクトリが既に存在する場合は無視
+        }
+      }
+
+      // ファイルを並列処理（バッチサイズ200で制御）
+      const BATCH_SIZE = 200;
+      console.log(`ファイル書き込み開始: ${filePaths.length} ファイル`);
+
+      for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
+        const batch = filePaths.slice(i, i + BATCH_SIZE);
+        await Promise.all(
+          batch.map(async ({ file, path }) => {
+            const content = await file.arrayBuffer();
+            await fs.writeFile(path, new Uint8Array(content));
+            // ArrayBufferを明示的に解放
+            return null;
+          })
+        );
+        console.log(`処理完了: ${Math.min(i + BATCH_SIZE, filePaths.length)}/${filePaths.length}`);
+
+        // バッチ処理後にGCを促す（ブラウザ依存だが試す価値あり）
+        if (i % (BATCH_SIZE * 5) === 0 && typeof (globalThis as any).gc === 'function') {
+          (globalThis as any).gc();
+        }
+      }
+
+      // 全てのファイル参照を解放
+      filePaths.length = 0;
 
       console.log('ファイルコピー完了、コミット履歴を取得中...');
       console.log('dirパス:', dir);
 
-      // コミット履歴を取得
-      const logs = await git.log({ fs, dir });
+      // コミット履歴を取得（depth制限付き）
+      const logs = await git.log({ fs, dir, depth });
       console.log(`コミット履歴取得完了: ${logs.length} コミット`);
       setCommits(logs);
     } catch (e: any) {
@@ -240,22 +282,45 @@ export default function GitDiffApp() {
   }
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Git Diff ZIP Exporter</h1>
+    <div className="p-6 max-w-7xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6">Git Diff ZIP Exporter</h1>
 
-      <div className="mb-6">
-        <label className="block mb-2 font-semibold">
-          リポジトリの .git ディレクトリを選択:
-        </label>
-        <input
-          type="file"
-          // @ts-ignore - webkitdirectory is not in the type definition
-          webkitdirectory=""
-          directory=""
-          onChange={handleDirectoryUpload}
-          className="border p-2"
-        />
-        {loading && <p className="mt-2 text-blue-600">読み込み中...</p>}
+      <div className="bg-white border-2 border-gray-200 rounded-lg p-6 mb-6 shadow-sm">
+        <div className="flex items-end gap-6">
+          <div className="flex-shrink-0">
+            <label className="block mb-2 font-semibold text-gray-700">
+              取得するコミット履歴の件数
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="1000"
+              value={depth}
+              onChange={(e) => setDepth(parseInt(e.target.value) || 50)}
+              className="border-2 border-gray-300 rounded p-2 w-32 focus:border-blue-500 focus:outline-none"
+            />
+            <p className="text-xs text-gray-500 mt-1">デフォルト: 50件</p>
+          </div>
+
+          <div className="flex-1">
+            <label className="block mb-2 font-semibold text-gray-700">
+              リポジトリの .git ディレクトリを選択
+            </label>
+            <input
+              type="file"
+              // @ts-ignore - webkitdirectory is not in the type definition
+              webkitdirectory=""
+              directory=""
+              onChange={handleDirectoryUpload}
+              className="border-2 border-gray-300 rounded p-2 w-full focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+        </div>
+        {loading && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-blue-700 font-semibold">
+            読み込み中...
+          </div>
+        )}
       </div>
 
       {commits.length === 0 && !loading && (
