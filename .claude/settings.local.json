@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(move srcmain.jsx srcmain.tsx)",
+      "Bash(move srcApp.jsx srcApp.tsx)",
+      "Bash(move srccomponentsGitDiffApp.jsx srccomponentsGitDiffApp.tsx)",
+      "Bash(npm run dev)",
+      "Bash(npm run type-check)",
+      "Bash(cat \"node_modules/@isomorphic-git/lightning-fs/package.json\")",
+      "Bash(npm install buffer)",
+      "Bash(git init)",
+      "Bash(git add .)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
