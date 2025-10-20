@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import git from "isomorphic-git";
 import type { WalkerEntry, ReadCommitResult } from "isomorphic-git";
 import LightningFS from "@isomorphic-git/lightning-fs";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
+import { createFsAccessAdapter } from "../lib/fsAccessAdapter";
 
 type PromisifiedFS = InstanceType<typeof LightningFS>['promises'];
 
@@ -20,6 +21,28 @@ export default function GitDiffApp() {
   const [loading, setLoading] = useState(false);
   const [repoFolderName, setRepoFolderName] = useState<string>("");
   const [currentBranch, setCurrentBranch] = useState<string>("");
+  const [logDepth, setLogDepth] = useState<number>(200);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const [listScrollTop, setListScrollTop] = useState(0);
+  const [listHeight, setListHeight] = useState(384); // default ~max-h-96
+
+  // tunables
+  const INITIAL_LOG_DEPTH = 200;
+  const LOG_PAGE_SIZE = 200;
+  const ZIP_READ_CONCURRENCY = 6; // 同時に読み出す変更ファイル数
+  const MAX_ZIP_FILE_BYTES = 25 * 1024 * 1024; // 1ファイルの上限（25MB）
+  const MAX_ZIP_FILES = 2000; // 変更ファイルが多すぎる場合の制限
+  const ROW_HEIGHT = 36; // コミット行の仮想化固定高さ(px)
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setListHeight(el.clientHeight));
+    ro.observe(el);
+    setListHeight(el.clientHeight);
+    return () => ro.disconnect();
+  }, []);
 
   // 初期化
   useEffect(() => {
@@ -28,9 +51,8 @@ export default function GitDiffApp() {
     setFs(pfs);
   }, []);
 
-  // File System Access APIを使用してディレクトリを読み込む
+  // File System Access APIを使用してディレクトリを読み込む（直接読み取りアダプタ採用）
   async function handleDirectoryPickerClick() {
-    if (!fs) return;
 
     // File System Access API対応チェック
     if (!('showDirectoryPicker' in window)) {
@@ -62,94 +84,14 @@ export default function GitDiffApp() {
       }
 
       const gitDirHandle = isGitFolder ? dirHandle : await dirHandle.getDirectoryHandle('.git');
-
-      // 必要なファイルを再帰的に収集
-      const filesToProcess: Array<{ handle: any; path: string }> = [];
-      const directories = new Set<string>();
-
-      async function collectFiles(dirHandle: any, basePath: string) {
-        for await (const entry of dirHandle.values()) {
-          const fullPath = basePath + '/' + entry.name;
-
-          if (entry.kind === 'file') {
-            // 必要なファイルのみをフィルタリング
-            if (
-              fullPath === '/.git/HEAD' ||
-              fullPath === '/.git/config' ||
-              fullPath === '/.git/packed-refs' ||
-              fullPath.startsWith('/.git/refs/') ||
-              (fullPath.startsWith('/.git/objects/') && !fullPath.startsWith('/.git/objects/info/'))
-            ) {
-              filesToProcess.push({ handle: entry, path: '/repo' + fullPath });
-
-              // ディレクトリパスを収集
-              const dirPath = ('/repo' + fullPath).substring(0, ('/repo' + fullPath).lastIndexOf('/'));
-              const dirs = dirPath.split('/').filter(Boolean);
-              let currentPath = '';
-              for (const d of dirs) {
-                currentPath += '/' + d;
-                directories.add(currentPath);
-              }
-            }
-          } else if (entry.kind === 'directory') {
-            // 必要なディレクトリのみ再帰
-            if (
-              fullPath === '/.git/refs' ||
-              fullPath.startsWith('/.git/refs/') ||
-              fullPath === '/.git/objects' ||
-              (fullPath.startsWith('/.git/objects/') && !fullPath.startsWith('/.git/objects/info/'))
-            ) {
-              await collectFiles(entry, fullPath);
-            }
-          }
-        }
-      }
-
-      console.log('.gitフォルダ内のファイルを収集中...');
-      await collectFiles(gitDirHandle, '/.git');
-      console.log(`収集完了: ${filesToProcess.length} ファイル`);
-
-      // ディレクトリを事前に一括作成
-      console.log(`ディレクトリ作成中: ${directories.size} 個`);
-      const sortedDirs = Array.from(directories).sort();
-      for (const dir of sortedDirs) {
-        try {
-          await fs.mkdir(dir);
-        } catch (e) {
-          // ディレクトリが既に存在する場合は無視
-        }
-      }
-
-      // ファイルを並列処理（バッチサイズ200で制御）
-      const BATCH_SIZE = 200;
-      console.log(`.gitファイル書き込み中: ${filesToProcess.length} ファイル`);
-
-      for (let i = 0; i < filesToProcess.length; i += BATCH_SIZE) {
-        const batch = filesToProcess.slice(i, i + BATCH_SIZE);
-        await Promise.all(
-          batch.map(async ({ handle, path }) => {
-            const fileHandle = await handle.getFile();
-            const content = await fileHandle.arrayBuffer();
-            await fs.writeFile(path, new Uint8Array(content));
-            return null;
-          })
-        );
-        console.log(`書き込み進捗: ${Math.min(i + BATCH_SIZE, filesToProcess.length)}/${filesToProcess.length}`);
-
-        // バッチ処理後にGCを促す
-        if (i % (BATCH_SIZE * 5) === 0 && typeof (globalThis as any).gc === 'function') {
-          (globalThis as any).gc();
-        }
-      }
-
-      // 全てのファイル参照を解放
-      filesToProcess.length = 0;
-
-      console.log('.gitファイル読み込み完了、コミット履歴を解析中...');
+      // 直接読み取り用のfsアダプタを用意
+      const directFs = createFsAccessAdapter(gitDirHandle) as any;
+      setFs(directFs);
+      console.log('.git 直接読み取りモードで履歴を解析中...');
 
       // HEADファイルからブランチ名を取得
       try {
-        const headContent = await fs.readFile('/repo/.git/HEAD', { encoding: 'utf8' });
+        const headContent = await directFs.readFile('/repo/.git/HEAD', { encoding: 'utf8' });
         const headStr = typeof headContent === 'string' ? headContent : new TextDecoder().decode(headContent as Uint8Array);
         console.log('HEAD内容:', headStr);
 
@@ -166,10 +108,11 @@ export default function GitDiffApp() {
         setCurrentBranch('(不明)');
       }
 
-      // コミット履歴を取得
-      const logs = await git.log({ fs, dir });
+      // コミット履歴を取得（初期は限定深さ）
+      const logs = await git.log({ fs: directFs, dir, depth: INITIAL_LOG_DEPTH });
       console.log(`コミット履歴取得完了: ${logs.length} コミット`);
       setCommits(logs);
+      setLogDepth(INITIAL_LOG_DEPTH);
     } catch (e: any) {
       if (e.name === 'AbortError') {
         console.log('ユーザーがキャンセルしました');
@@ -299,10 +242,6 @@ export default function GitDiffApp() {
           })
         );
         console.log(`書き込み進捗: ${Math.min(i + BATCH_SIZE, filePaths.length)}/${filePaths.length}`);
-
-        if (i % (BATCH_SIZE * 5) === 0 && typeof (globalThis as any).gc === 'function') {
-          (globalThis as any).gc();
-        }
       }
 
       filePaths.length = 0;
@@ -326,10 +265,11 @@ export default function GitDiffApp() {
         setCurrentBranch('(不明)');
       }
 
-      // コミット履歴を取得
-      const logs = await git.log({ fs, dir });
+      // コミット履歴を取得（初期は限定深さ）
+      const logs = await git.log({ fs, dir, depth: INITIAL_LOG_DEPTH });
       console.log(`コミット履歴取得完了: ${logs.length} コミット`);
       setCommits(logs);
+      setLogDepth(INITIAL_LOG_DEPTH);
     } catch (e: any) {
       alert("エラー: " + e.message);
       console.error(e);
@@ -386,19 +326,26 @@ export default function GitDiffApp() {
         const [a, b] = entries;
         const aType = await a?.type();
         const bType = await b?.type();
-        if (aType === "blob" || bType === "blob") {
-          const aContent = await a?.content();
-          const bContent = await b?.content();
-          if (!aContent || !bContent)
-            return { path: filepath, status: "added/removed" };
-          if (aContent.toString() !== bContent.toString())
-            return { path: filepath, status: "modified" };
+
+        // 片方のみblob（追加/削除）
+        if ((aType === 'blob' && bType !== 'blob') || (aType !== 'blob' && bType === 'blob')) {
+          return { path: filepath, status: 'added/removed' };
         }
+
+        // 両方blobならOID比較で差分判定（内容を読まない）
+        if (aType === 'blob' && bType === 'blob') {
+          const aoid = await a!.oid();
+          const boid = await b!.oid();
+          if (aoid !== boid) {
+            return { path: filepath, status: 'modified' };
+          }
+        }
+
         return undefined;
       },
     });
 
-    const valid = changes.filter((item: DiffItem | undefined): item is DiffItem => item !== undefined && item !== null);
+    let valid = changes.filter((item: DiffItem | undefined): item is DiffItem => item !== undefined && item !== null);
     setDiff(valid);
 
     // 1つのZIPファイルに変更前と変更後を含める（差分があるファイルのみ）
@@ -412,35 +359,42 @@ export default function GitDiffApp() {
     const newFolder = diffZip.folder("変更後");
     if (!newFolder) throw new Error("Failed to create new folder");
 
-    // 差分があるファイルのみをZIPに追加
-    for (const item of valid) {
-      const filepath = item.path;
+    // 多すぎる場合は上限に丸める
+    if (valid.length > MAX_ZIP_FILES) {
+      alert(`変更ファイル数が多いため、先頭${MAX_ZIP_FILES}件のみZIPに含めます（${valid.length}件中）。`);
+      valid = valid.slice(0, MAX_ZIP_FILES);
+    }
 
-      // 変更前のファイルを取得（削除されていない場合）
-      try {
-        const oldBlob = await git.readBlob({
-          fs,
-          dir,
-          oid: oldCommit,
-          filepath,
-        });
-        oldFolder.file(filepath, oldBlob.blob);
-      } catch (e) {
-        // ファイルが存在しない（追加されたファイル）場合はスキップ
-      }
+    // 差分があるファイルのみをZIPに追加（並列数を制御）
+    for (let i = 0; i < valid.length; i += ZIP_READ_CONCURRENCY) {
+      const batch = valid.slice(i, i + ZIP_READ_CONCURRENCY);
+      await Promise.all(
+        batch.map(async (item) => {
+          const filepath = item.path;
 
-      // 変更後のファイルを取得（削除されていない場合）
-      try {
-        const newBlob = await git.readBlob({
-          fs,
-          dir,
-          oid: newCommit,
-          filepath,
-        });
-        newFolder.file(filepath, newBlob.blob);
-      } catch (e) {
-        // ファイルが存在しない（削除されたファイル）場合はスキップ
-      }
+          // 変更前
+          try {
+            const oldBlob = await git.readBlob({ fs, dir, oid: oldCommit, filepath });
+            const size = (oldBlob.blob as Uint8Array).byteLength ?? 0;
+            if (size <= MAX_ZIP_FILE_BYTES) {
+              oldFolder.file(filepath, oldBlob.blob as Uint8Array);
+            } else {
+              console.warn(`Skip old large file (> ${MAX_ZIP_FILE_BYTES}): ${filepath}`);
+            }
+          } catch {}
+
+          // 変更後
+          try {
+            const newBlob = await git.readBlob({ fs, dir, oid: newCommit, filepath });
+            const size = (newBlob.blob as Uint8Array).byteLength ?? 0;
+            if (size <= MAX_ZIP_FILE_BYTES) {
+              newFolder.file(filepath, newBlob.blob as Uint8Array);
+            } else {
+              console.warn(`Skip new large file (> ${MAX_ZIP_FILE_BYTES}): ${filepath}`);
+            }
+          } catch {}
+        })
+      );
     }
 
     // 1つのZIPファイルとしてダウンロード
@@ -516,8 +470,21 @@ export default function GitDiffApp() {
                 <div className="col-span-2">日時</div>
                 <div className="col-span-1">ハッシュ</div>
               </div>
-              <div className="max-h-96 overflow-y-auto">
-                {commits.map((c) => {
+              <div
+                ref={listRef}
+                className="max-h-96 overflow-y-auto relative"
+                onScroll={(e) => setListScrollTop((e.target as HTMLDivElement).scrollTop)}
+              >
+                {(() => {
+                  const total = commits.length;
+                  const visibleCount = Math.ceil(listHeight / ROW_HEIGHT) + 10; // overscan
+                  const start = Math.max(0, Math.floor(listScrollTop / ROW_HEIGHT) - 5);
+                  const end = Math.min(total, start + visibleCount);
+                  const items = commits.slice(start, end);
+                  return (
+                    <div style={{ height: total * ROW_HEIGHT + 'px', position: 'relative' }}>
+                      <div style={{ position: 'absolute', top: start * ROW_HEIGHT + 'px', left: 0, right: 0 }}>
+                        {items.map((c) => {
                   const isSelected = selectedCommits.includes(c.oid);
 
                   // 選択されている場合、タイムスタンプでOld/Newを判定
@@ -547,20 +514,20 @@ export default function GitDiffApp() {
 
                   const date = new Date(c.commit.author.timestamp * 1000);
 
-                  return (
-                    <div
-                      key={c.oid}
-                      onClick={() => handleCommitToggle(c.oid)}
-                      className={`grid grid-cols-11 gap-2 px-3 py-1.5 border-b last:border-b-0 hover:bg-gray-50 transition cursor-pointer text-sm ${
-                        isSelected
-                          ? isOld
-                            ? 'bg-blue-50 border-l-2 border-l-blue-500'
-                            : isNew
-                            ? 'bg-emerald-50 border-l-2 border-l-emerald-500'
-                            : 'bg-gray-50 border-l-2 border-l-gray-400'
-                          : ''
-                      }`}
-                    >
+                          return (
+                            <div
+                          key={c.oid}
+                          onClick={() => handleCommitToggle(c.oid)}
+                          className={`grid grid-cols-11 gap-2 px-3 py-1.5 border-b last:border-b-0 hover:bg-gray-50 transition cursor-pointer text-sm ${
+                            isSelected
+                              ? isOld
+                                ? 'bg-blue-50 border-l-2 border-l-blue-500'
+                                : isNew
+                                ? 'bg-emerald-50 border-l-2 border-l-emerald-500'
+                                : 'bg-gray-50 border-l-2 border-l-gray-400'
+                              : ''
+                          }`}
+                        >
                       <div className="col-span-1 flex justify-center items-center">
                         <div className="relative">
                           <input
@@ -597,9 +564,37 @@ export default function GitDiffApp() {
                       <div className="col-span-1 text-xs text-gray-500 font-mono truncate" title={c.oid}>
                         {c.oid.slice(0, 7)}
                       </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
-                })}
+                })()}
+              </div>
+              <div className="px-3 py-2 border-t border-gray-200 flex items-center justify-center bg-white">
+                <button
+                  disabled={loadingMore}
+                  onClick={async () => {
+                    if (!fs) return;
+                    try {
+                      setLoadingMore(true);
+                      const dir = "/repo";
+                      const nextDepth = logDepth + LOG_PAGE_SIZE;
+                      const logs = await git.log({ fs, dir, depth: nextDepth });
+                      setCommits(prev => {
+                        const newOnes = logs.slice(prev.length);
+                        return prev.concat(newOnes);
+                      });
+                      setLogDepth(nextDepth);
+                    } finally {
+                      setLoadingMore(false);
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded text-sm font-medium ${loadingMore ? 'bg-gray-200 text-gray-400' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                >
+                  {loadingMore ? '読み込み中...' : 'さらに読み込む'}
+                </button>
               </div>
             </div>
           </div>
