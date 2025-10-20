@@ -19,6 +19,8 @@ export default function GitDiffApp() {
   const [selectedCommits, setSelectedCommits] = useState<string[]>([]);
   const [diff, setDiff] = useState<DiffItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [zipping, setZipping] = useState(false);
+  const [zipProgress, setZipProgress] = useState<number>(0);
   const [repoFolderName, setRepoFolderName] = useState<string>("");
   const [currentBranch, setCurrentBranch] = useState<string>("");
   const [logDepth, setLogDepth] = useState<number>(200);
@@ -365,6 +367,11 @@ export default function GitDiffApp() {
       valid = valid.slice(0, MAX_ZIP_FILES);
     }
 
+    // Start ZIP progress UI
+    setZipping(true);
+    setZipProgress(0);
+    
+
     // 差分があるファイルのみをZIPに追加（並列数を制御）
     for (let i = 0; i < valid.length; i += ZIP_READ_CONCURRENCY) {
       const batch = valid.slice(i, i + ZIP_READ_CONCURRENCY);
@@ -395,10 +402,22 @@ export default function GitDiffApp() {
           } catch {}
         })
       );
+      // Yield to UI so progress feels responsive
+      await new Promise(requestAnimationFrame);
     }
 
     // 1つのZIPファイルとしてダウンロード
-    saveAs(await diffZip.generateAsync({ type: "blob" }), "diff.zip");
+    const blob = await diffZip.generateAsync(
+      { type: "blob", compression: "STORE" },
+      (meta) => {
+        if (typeof meta.percent === 'number') {
+          setZipProgress(Math.min(100, Math.max(0, Math.round(meta.percent))));
+        }
+      }
+    );
+    saveAs(blob, "diff.zip");
+    setZipping(false);
+    setZipProgress(0);
   }
 
   return (
@@ -443,6 +462,15 @@ export default function GitDiffApp() {
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
           読み込み中...
+        </div>
+      )}
+      {zipping && (
+        <div className="mb-3 p-2 bg-amber-50 border-l-2 border-amber-500 text-amber-800 text-sm flex items-center gap-2">
+          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          ZIPを作成中... {zipProgress}%
         </div>
       )}
 
