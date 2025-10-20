@@ -21,6 +21,8 @@ export default function GitDiffApp() {
   const [loading, setLoading] = useState(false);
   const [zipping, setZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState<number>(0);
+  const [diffing, setDiffing] = useState(false);
+  const [diffProgress, setDiffProgress] = useState<number>(0);
   const [repoFolderName, setRepoFolderName] = useState<string>("");
   const [currentBranch, setCurrentBranch] = useState<string>("");
   const [logDepth, setLogDepth] = useState<number>(200);
@@ -33,7 +35,7 @@ export default function GitDiffApp() {
   // tunables
   const INITIAL_LOG_DEPTH = 200;
   const LOG_PAGE_SIZE = 200;
-  const ZIP_READ_CONCURRENCY = 6; // 同時に読み出す変更ファイル数
+  const ZIP_READ_CONCURRENCY = 12; // 同時に読み出す変更ファイル数（6→12に増加）
   const MAX_ZIP_FILE_BYTES = 25 * 1024 * 1024; // 1ファイルの上限（25MB）
   const MAX_ZIP_FILES = 2000; // 変更ファイルが多すぎる場合の制限
   const ROW_HEIGHT = 36; // コミット行の仮想化固定高さ(px)
@@ -317,6 +319,8 @@ export default function GitDiffApp() {
       ? [selectedCommits[0], selectedCommits[1]]
       : [selectedCommits[1], selectedCommits[0]];
 
+    setDiffing(true);
+    setDiffProgress(0);
     console.time('diff_walk');
     const changes = await git.walk({
       fs,
@@ -330,21 +334,31 @@ export default function GitDiffApp() {
         if (!filepath) return undefined;
         const [a, b] = entries;
 
-        // type()とoid()を並列で取得して高速化
-        const [aType, bType, aOid, bOid] = await Promise.all([
+        // 早期リターン: 両方nullなら無視
+        if (!a && !b) return undefined;
+
+        // type()を先に取得して、blob以外は早期リターン
+        const [aType, bType] = await Promise.all([
           a?.type(),
-          b?.type(),
-          a?.oid(),
-          b?.oid()
+          b?.type()
         ]);
+
+        // ディレクトリは無視（高速化）
+        if (aType === 'tree' || bType === 'tree') return undefined;
 
         // 片方のみblob（追加/削除）
         if ((aType === 'blob' && bType !== 'blob') || (aType !== 'blob' && bType === 'blob')) {
-          return { path: filepath, status: 'added/removed' };
+          const status = !aType || aType !== 'blob' ? 'added' : 'deleted';
+          return { path: filepath, status };
         }
 
-        // 両方blobならOID比較で差分判定（内容を読まない）
+        // 両方blobの場合のみOID比較
         if (aType === 'blob' && bType === 'blob') {
+          const [aOid, bOid] = await Promise.all([
+            a!.oid(),
+            b!.oid()
+          ]);
+
           if (aOid !== bOid) {
             return { path: filepath, status: 'modified' };
           }
@@ -359,6 +373,8 @@ export default function GitDiffApp() {
     let valid = changes.filter((item: DiffItem | undefined): item is DiffItem => item !== undefined && item !== null);
     console.log('diff entries:', valid.length);
     setDiff(valid);
+    setDiffing(false);
+    setDiffProgress(100);
 
     // 1つのZIPファイルに変更前と変更後を含める（差分があるファイルのみ）
     const diffZip = new JSZip();
@@ -383,38 +399,55 @@ export default function GitDiffApp() {
     
 
     // 差分があるファイルのみをZIPに追加（並列数を制御）
+    console.time('blob_read');
     for (let i = 0; i < valid.length; i += ZIP_READ_CONCURRENCY) {
       const batch = valid.slice(i, i + ZIP_READ_CONCURRENCY);
       await Promise.all(
         batch.map(async (item: DiffItem) => {
           const filepath = item.path;
+          const isAdded = item.status === 'added';
+          const isDeleted = item.status === 'deleted';
 
-          // 変更前
-          try {
-            const oldBlob = await git.readBlob({ fs, dir, cache: GIT_CACHE.current, oid: oldCommit, filepath });
-            const size = (oldBlob.blob as Uint8Array).byteLength ?? 0;
-            if (size <= MAX_ZIP_FILE_BYTES) {
-              oldFolder.file(filepath, oldBlob.blob as Uint8Array);
-            } else {
-              console.warn(`Skip old large file (> ${MAX_ZIP_FILE_BYTES}): ${filepath}`);
+          // 変更前（削除されたファイルのみ、または変更されたファイル）
+          if (!isAdded) {
+            try {
+              const oldBlob = await git.readBlob({ fs, dir, cache: GIT_CACHE.current, oid: oldCommit, filepath });
+              const size = (oldBlob.blob as Uint8Array).byteLength ?? 0;
+              if (size <= MAX_ZIP_FILE_BYTES) {
+                oldFolder.file(filepath, oldBlob.blob as Uint8Array);
+              } else {
+                console.warn(`Skip old large file (> ${MAX_ZIP_FILE_BYTES}): ${filepath}`);
+              }
+            } catch (e) {
+              console.warn(`Failed to read old blob: ${filepath}`, e);
             }
-          } catch {}
+          }
 
-          // 変更後
-          try {
-            const newBlob = await git.readBlob({ fs, dir, cache: GIT_CACHE.current, oid: newCommit, filepath });
-            const size = (newBlob.blob as Uint8Array).byteLength ?? 0;
-            if (size <= MAX_ZIP_FILE_BYTES) {
-              newFolder.file(filepath, newBlob.blob as Uint8Array);
-            } else {
-              console.warn(`Skip new large file (> ${MAX_ZIP_FILE_BYTES}): ${filepath}`);
+          // 変更後（追加されたファイルのみ、または変更されたファイル）
+          if (!isDeleted) {
+            try {
+              const newBlob = await git.readBlob({ fs, dir, cache: GIT_CACHE.current, oid: newCommit, filepath });
+              const size = (newBlob.blob as Uint8Array).byteLength ?? 0;
+              if (size <= MAX_ZIP_FILE_BYTES) {
+                newFolder.file(filepath, newBlob.blob as Uint8Array);
+              } else {
+                console.warn(`Skip new large file (> ${MAX_ZIP_FILE_BYTES}): ${filepath}`);
+              }
+            } catch (e) {
+              console.warn(`Failed to read new blob: ${filepath}`, e);
             }
-          } catch {}
+          }
         })
       );
+
+      // 進捗を更新
+      const progress = Math.min(100, Math.round(((i + ZIP_READ_CONCURRENCY) / valid.length) * 100));
+      setZipProgress(progress);
+
       // Yield to UI so progress feels responsive
       await new Promise(requestAnimationFrame);
     }
+    console.timeEnd('blob_read');
 
     // 1つのZIPファイルとしてダウンロード
     const blob = await diffZip.generateAsync(
@@ -472,6 +505,15 @@ export default function GitDiffApp() {
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
           読み込み中...
+        </div>
+      )}
+      {diffing && (
+        <div className="mb-3 p-2 bg-purple-50 border-l-2 border-purple-500 text-purple-800 text-sm flex items-center gap-2">
+          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          差分を計算中...
         </div>
       )}
       {zipping && (
