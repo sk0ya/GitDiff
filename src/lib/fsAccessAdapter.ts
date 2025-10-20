@@ -6,6 +6,16 @@ export type FSLike = {
   readdir: (path: string) => Promise<string[]>;
   stat: (path: string) => Promise<any>;
   lstat: (path: string) => Promise<any>;
+  readlink: (path: string) => Promise<string>;
+  // stubs for APIs isomorphic-git may probe
+  writeFile?: (path: string, data: Uint8Array | string) => Promise<void>;
+  mkdir?: (path: string) => Promise<void>;
+  rmdir?: (path: string) => Promise<void>;
+  unlink?: (path: string) => Promise<void>;
+  symlink?: (target: string, path: string) => Promise<void>;
+  open?: (...args: any[]) => Promise<any>;
+  read?: (...args: any[]) => Promise<any>;
+  close?: (...args: any[]) => Promise<void>;
 };
 
 function makeStats(isFile: boolean, size = 0) {
@@ -89,8 +99,57 @@ export function createFsAccessAdapter(gitDirHandle: FileSystemDirectoryHandle): 
     async lstat(path: string): Promise<any> {
       return this.stat(path);
     },
+
+    async readlink(_path: string): Promise<string> {
+      // No symlinks are expected in .git for our use; throw to indicate unsupported
+      const err: any = new Error('readlink not supported');
+      err.code = 'ENOTSUP';
+      throw err;
+    },
+    // callback-API names that isomorphic-git attempts to bind; we provide stubs
+    async writeFile(_path: string, _data: Uint8Array | string): Promise<void> {
+      const err: any = new Error('writeFile not supported');
+      err.code = 'ENOTSUP';
+      throw err;
+    },
+    async mkdir(_path: string): Promise<void> {
+      const err: any = new Error('mkdir not supported');
+      err.code = 'ENOTSUP';
+      throw err;
+    },
+    async rmdir(_path: string): Promise<void> {
+      const err: any = new Error('rmdir not supported');
+      err.code = 'ENOTSUP';
+      throw err;
+    },
+    async unlink(_path: string): Promise<void> {
+      const err: any = new Error('unlink not supported');
+      err.code = 'ENOTSUP';
+      throw err;
+    },
+    async symlink(_target: string, _path: string): Promise<void> {
+      const err: any = new Error('symlink not supported');
+      err.code = 'ENOTSUP';
+      throw err;
+    },
+    async open(): Promise<any> {
+      const err: any = new Error('open not supported');
+      err.code = 'ENOTSUP';
+      throw err;
+    },
+    async read(): Promise<any> {
+      const err: any = new Error('read not supported');
+      err.code = 'ENOTSUP';
+      throw err;
+    },
+    async close(): Promise<void> {
+      const err: any = new Error('close not supported');
+      err.code = 'ENOTSUP';
+      throw err;
+    },
   };
 
+  // Some consumers may look for `fs.promises.*` (Node-style). Point it to self.
+  (fs as any).promises = fs;
   return fs;
 }
-

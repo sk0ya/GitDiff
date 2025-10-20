@@ -369,7 +369,7 @@ export default function GitDiffApp() {
     for (let i = 0; i < valid.length; i += ZIP_READ_CONCURRENCY) {
       const batch = valid.slice(i, i + ZIP_READ_CONCURRENCY);
       await Promise.all(
-        batch.map(async (item) => {
+        batch.map(async (item: DiffItem) => {
           const filepath = item.path;
 
           // 変更前
