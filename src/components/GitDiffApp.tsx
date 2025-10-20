@@ -28,6 +28,7 @@ export default function GitDiffApp() {
   const listRef = useRef<HTMLDivElement | null>(null);
   const [listScrollTop, setListScrollTop] = useState(0);
   const [listHeight, setListHeight] = useState(384); // default ~max-h-96
+  const GIT_CACHE = useRef<Record<string, any>>({});
 
   // tunables
   const INITIAL_LOG_DEPTH = 200;
@@ -316,9 +317,11 @@ export default function GitDiffApp() {
       ? [selectedCommits[0], selectedCommits[1]]
       : [selectedCommits[1], selectedCommits[0]];
 
+    console.time('diff_walk');
     const changes = await git.walk({
       fs,
       dir,
+      cache: GIT_CACHE.current,
       trees: [
         git.TREE({ ref: oldCommit }),
         git.TREE({ ref: newCommit }),
@@ -326,8 +329,14 @@ export default function GitDiffApp() {
       map: async (filepath: string, entries: (WalkerEntry | null)[]): Promise<DiffItem | undefined> => {
         if (!filepath) return undefined;
         const [a, b] = entries;
-        const aType = await a?.type();
-        const bType = await b?.type();
+
+        // type()とoid()を並列で取得して高速化
+        const [aType, bType, aOid, bOid] = await Promise.all([
+          a?.type(),
+          b?.type(),
+          a?.oid(),
+          b?.oid()
+        ]);
 
         // 片方のみblob（追加/削除）
         if ((aType === 'blob' && bType !== 'blob') || (aType !== 'blob' && bType === 'blob')) {
@@ -336,9 +345,7 @@ export default function GitDiffApp() {
 
         // 両方blobならOID比較で差分判定（内容を読まない）
         if (aType === 'blob' && bType === 'blob') {
-          const aoid = await a!.oid();
-          const boid = await b!.oid();
-          if (aoid !== boid) {
+          if (aOid !== bOid) {
             return { path: filepath, status: 'modified' };
           }
         }
@@ -346,8 +353,11 @@ export default function GitDiffApp() {
         return undefined;
       },
     });
+    console.timeEnd('diff_walk');
+    console.log('walk paths:', changes.length);
 
     let valid = changes.filter((item: DiffItem | undefined): item is DiffItem => item !== undefined && item !== null);
+    console.log('diff entries:', valid.length);
     setDiff(valid);
 
     // 1つのZIPファイルに変更前と変更後を含める（差分があるファイルのみ）
@@ -381,7 +391,7 @@ export default function GitDiffApp() {
 
           // 変更前
           try {
-            const oldBlob = await git.readBlob({ fs, dir, oid: oldCommit, filepath });
+            const oldBlob = await git.readBlob({ fs, dir, cache: GIT_CACHE.current, oid: oldCommit, filepath });
             const size = (oldBlob.blob as Uint8Array).byteLength ?? 0;
             if (size <= MAX_ZIP_FILE_BYTES) {
               oldFolder.file(filepath, oldBlob.blob as Uint8Array);
@@ -392,7 +402,7 @@ export default function GitDiffApp() {
 
           // 変更後
           try {
-            const newBlob = await git.readBlob({ fs, dir, oid: newCommit, filepath });
+            const newBlob = await git.readBlob({ fs, dir, cache: GIT_CACHE.current, oid: newCommit, filepath });
             const size = (newBlob.blob as Uint8Array).byteLength ?? 0;
             if (size <= MAX_ZIP_FILE_BYTES) {
               newFolder.file(filepath, newBlob.blob as Uint8Array);
