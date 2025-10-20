@@ -22,7 +22,6 @@ export default function GitDiffApp() {
   const [zipping, setZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState<number>(0);
   const [diffing, setDiffing] = useState(false);
-  const [diffProgress, setDiffProgress] = useState<number>(0);
   const [repoFolderName, setRepoFolderName] = useState<string>("");
   const [currentBranch, setCurrentBranch] = useState<string>("");
   const [logDepth, setLogDepth] = useState<number>(200);
@@ -320,7 +319,6 @@ export default function GitDiffApp() {
       : [selectedCommits[1], selectedCommits[0]];
 
     setDiffing(true);
-    setDiffProgress(0);
     console.time('diff_walk');
     const changes = await git.walk({
       fs,
@@ -374,7 +372,6 @@ export default function GitDiffApp() {
     console.log('diff entries:', valid.length);
     setDiff(valid);
     setDiffing(false);
-    setDiffProgress(100);
 
     // 1つのZIPファイルに変更前と変更後を含める（差分があるファイルのみ）
     const diffZip = new JSZip();
