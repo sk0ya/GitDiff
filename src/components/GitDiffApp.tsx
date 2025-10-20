@@ -328,12 +328,12 @@ export default function GitDiffApp() {
         git.TREE({ ref: oldCommit }),
         git.TREE({ ref: newCommit }),
       ],
-      map: async (filepath: string, entries: (WalkerEntry | null)[]): Promise<DiffItem | undefined> => {
-        if (!filepath) return undefined;
+      map: async (filepath: string, entries: (WalkerEntry | null)[]): Promise<DiffItem | undefined | null> => {
+        if (!filepath) return null;
         const [a, b] = entries;
 
         // 早期リターン: 両方nullなら無視
-        if (!a && !b) return undefined;
+        if (!a && !b) return null;
 
         // 片方だけnullの場合は追加/削除（type()を呼ばずに判定）
         if (!a) return { path: filepath, status: 'added' };
@@ -345,11 +345,10 @@ export default function GitDiffApp() {
           b.oid()
         ]);
 
-        // OIDが同じなら変更なし（ファイルでもディレクトリでも）
-        // ディレクトリの場合、git.walkは自動的に配下もスキップしないが、
-        // type()呼び出しを節約できる
+        // OIDが同じなら変更なし
+        // nullを返すことで、ディレクトリの場合はサブツリー全体をスキップ！
         if (aOid === bOid) {
-          return undefined;
+          return null;
         }
 
         // OIDが異なる場合、typeを確認
@@ -358,7 +357,8 @@ export default function GitDiffApp() {
           b.type()
         ]);
 
-        // ディレクトリの場合は配下を走査する必要があるので undefined を返す
+        // ディレクトリの場合は配下を走査するため undefined を返す
+        // （nullではなくundefinedを返すことで、配下の走査を継続）
         if (aType === 'tree' || bType === 'tree') return undefined;
 
         // 両方blobで、OIDが異なる → 変更あり
