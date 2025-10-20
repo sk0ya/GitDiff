@@ -335,31 +335,35 @@ export default function GitDiffApp() {
         // 早期リターン: 両方nullなら無視
         if (!a && !b) return undefined;
 
-        // type()を先に取得して、blob以外は早期リターン
-        const [aType, bType] = await Promise.all([
-          a?.type(),
-          b?.type()
+        // 片方だけnullの場合は追加/削除（type()を呼ばずに判定）
+        if (!a) return { path: filepath, status: 'added' };
+        if (!b) return { path: filepath, status: 'deleted' };
+
+        // 両方存在する場合、まずOIDを比較
+        const [aOid, bOid] = await Promise.all([
+          a.oid(),
+          b.oid()
         ]);
 
-        // ディレクトリは無視（高速化）
-        if (aType === 'tree' || bType === 'tree') return undefined;
-
-        // 片方のみblob（追加/削除）
-        if ((aType === 'blob' && bType !== 'blob') || (aType !== 'blob' && bType === 'blob')) {
-          const status = !aType || aType !== 'blob' ? 'added' : 'deleted';
-          return { path: filepath, status };
+        // OIDが同じなら変更なし（ファイルでもディレクトリでも）
+        // ディレクトリの場合、git.walkは自動的に配下もスキップしないが、
+        // type()呼び出しを節約できる
+        if (aOid === bOid) {
+          return undefined;
         }
 
-        // 両方blobの場合のみOID比較
-        if (aType === 'blob' && bType === 'blob') {
-          const [aOid, bOid] = await Promise.all([
-            a!.oid(),
-            b!.oid()
-          ]);
+        // OIDが異なる場合、typeを確認
+        const [aType, bType] = await Promise.all([
+          a.type(),
+          b.type()
+        ]);
 
-          if (aOid !== bOid) {
-            return { path: filepath, status: 'modified' };
-          }
+        // ディレクトリの場合は配下を走査する必要があるので undefined を返す
+        if (aType === 'tree' || bType === 'tree') return undefined;
+
+        // 両方blobで、OIDが異なる → 変更あり
+        if (aType === 'blob' && bType === 'blob') {
+          return { path: filepath, status: 'modified' };
         }
 
         return undefined;
