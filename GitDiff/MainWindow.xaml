@@ -22,6 +22,7 @@
         <converters:StatusToColorConverter x:Key="StatusToColorConverter" />
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         <converters:NullToBoolConverter x:Key="NullToBoolConverter" />
+        <converters:CommitRoleConverter x:Key="CommitRoleConverter" />
     </Window.Resources>
 
     <DockPanel LastChildFill="True">
@@ -155,10 +156,12 @@
             <DockPanel Grid.Row="0">
                 <TextBlock DockPanel.Dock="Top" Text="Commits" FontWeight="SemiBold" FontSize="12"
                            Margin="4,2,4,2" />
-                <DataGrid ItemsSource="{Binding Commits}"
+                <DataGrid x:Name="CommitsGrid"
+                          ItemsSource="{Binding Commits}"
                           AutoGenerateColumns="False"
                           IsReadOnly="True"
-                          SelectionMode="Single"
+                          SelectionMode="Extended"
+                          PreviewMouseLeftButtonDown="CommitsGrid_PreviewMouseLeftButtonDown"
                           CanUserSortColumns="True"
                           CanUserResizeColumns="True"
                           HeadersVisibility="Column"
@@ -168,27 +171,31 @@
                           RowHeight="28"
                           FontSize="12">
                     <DataGrid.Columns>
-                        <DataGridTemplateColumn Header="" Width="Auto" CanUserSort="False">
+                        <DataGridTemplateColumn Header="" Width="48" CanUserSort="False" CanUserResize="False">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <StackPanel Orientation="Horizontal">
-                                        <Button Style="{StaticResource MaterialDesignFlatButton}"
-                                                Content="B"
-                                                ToolTip="Set as Base commit"
-                                                FontSize="10"
-                                                Padding="2,0"
-                                                MinWidth="24" Height="20"
-                                                Command="{Binding DataContext.SetBaseCommitCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}" />
-                                        <Button Style="{StaticResource MaterialDesignFlatSecondaryButton}"
-                                                Content="T"
-                                                ToolTip="Set as Target commit"
-                                                FontSize="10"
-                                                Padding="2,0"
-                                                MinWidth="24" Height="20"
-                                                Command="{Binding DataContext.SetTargetCommitCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}" />
-                                    </StackPanel>
+                                    <TextBlock FontWeight="Bold" FontSize="10" HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" Padding="2,0">
+                                        <TextBlock.Text>
+                                            <MultiBinding Converter="{StaticResource CommitRoleConverter}">
+                                                <Binding />
+                                                <Binding Path="DataContext.BaseCommit" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                                                <Binding Path="DataContext.TargetCommit" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <Trigger Property="Text" Value="Base">
+                                                        <Setter Property="Foreground" Value="{DynamicResource PrimaryHueMidBrush}" />
+                                                    </Trigger>
+                                                    <Trigger Property="Text" Value="Target">
+                                                        <Setter Property="Foreground" Value="{DynamicResource SecondaryHueMidBrush}" />
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>

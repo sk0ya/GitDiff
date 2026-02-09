@@ -146,24 +146,6 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private void SetBaseCommit(CommitInfo? commit)
-    {
-        if (commit == null) return;
-        if (TargetCommit == commit)
-            TargetCommit = null;
-        BaseCommit = commit;
-    }
-
-    [RelayCommand]
-    private void SetTargetCommit(CommitInfo? commit)
-    {
-        if (commit == null) return;
-        if (BaseCommit == commit)
-            BaseCommit = null;
-        TargetCommit = commit;
-    }
-
     private bool CanCompare() => BaseCommit != null && TargetCommit != null;
 
     [RelayCommand(CanExecute = nameof(CanCompare))]
