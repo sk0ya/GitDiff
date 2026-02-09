@@ -219,7 +219,6 @@
                           GridLinesVisibility="Horizontal"
                           BorderThickness="1"
                           BorderBrush="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}"
-                          RowHeight="26"
                           FontSize="12">
                     <DataGrid.Columns>
                         <DataGridTemplateColumn Header="Status" Width="70" SortMemberPath="StatusText">
