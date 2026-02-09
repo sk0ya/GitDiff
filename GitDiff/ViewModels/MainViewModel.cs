@@ -49,6 +49,12 @@ public partial class MainViewModel : ObservableObject
     private CommitInfo? _targetCommit;
 
     [ObservableProperty]
+    private ObservableCollection<SelectableCommitter> _compareCommitters = [];
+
+    [ObservableProperty]
+    private string _compareCommitterLabel = "Committer(All)";
+
+    [ObservableProperty]
     private ObservableCollection<DiffFileInfo> _diffFiles = [];
 
     [ObservableProperty]
@@ -70,12 +76,14 @@ public partial class MainViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasBaseCommit));
         CompareCommand.NotifyCanExecuteChanged();
+        UpdateCompareCommitters();
     }
 
     partial void OnTargetCommitChanged(CommitInfo? value)
     {
         OnPropertyChanged(nameof(HasTargetCommit));
         CompareCommand.NotifyCanExecuteChanged();
+        UpdateCompareCommitters();
     }
 
     [RelayCommand]
@@ -160,9 +168,19 @@ public partial class MainViewModel : ObservableObject
             var repoPath = RepositoryPath;
             var folderFilter = FolderFilter;
 
+            // Get selected committers (empty or all selected = no filter)
+            var selectedCommitters = CompareCommitters
+                .Where(c => c.IsSelected)
+                .Select(c => c.Name)
+                .ToList();
+            var useCommitterFilter = selectedCommitters.Count > 0
+                && selectedCommitters.Count < CompareCommitters.Count;
+
             var files = await Task.Run(() =>
             {
-                var diffs = _gitService.GetDiffFiles(repoPath, baseHash, targetHash);
+                var diffs = useCommitterFilter
+                    ? _gitService.GetDiffFiles(repoPath, baseHash, targetHash, selectedCommitters)
+                    : _gitService.GetDiffFiles(repoPath, baseHash, targetHash);
 
                 if (!string.IsNullOrWhiteSpace(folderFilter))
                 {
@@ -229,6 +247,57 @@ public partial class MainViewModel : ObservableObject
         {
             IsLoading = false;
         }
+    }
+
+    private void UpdateCompareCommitters()
+    {
+        if (BaseCommit == null || TargetCommit == null)
+        {
+            CompareCommitters = [];
+            CompareCommitterLabel = "Committer(All)";
+            return;
+        }
+
+        try
+        {
+            var committers = _gitService.GetCommittersBetween(RepositoryPath, BaseCommit.Hash, TargetCommit.Hash);
+            var items = committers.Select(name => new SelectableCommitter { Name = name }).ToList();
+            foreach (var item in items)
+            {
+                item.PropertyChanged += (_, _) => UpdateCompareCommitterLabel();
+            }
+            CompareCommitters = new ObservableCollection<SelectableCommitter>(items);
+            UpdateCompareCommitterLabel();
+        }
+        catch
+        {
+            CompareCommitters = [];
+            CompareCommitterLabel = "Committer(All)";
+        }
+    }
+
+    private void UpdateCompareCommitterLabel()
+    {
+        var total = CompareCommitters.Count;
+        var selected = CompareCommitters.Count(c => c.IsSelected);
+
+        CompareCommitterLabel = selected == 0 || selected == total
+            ? "Committer(All)"
+            : $"Committer({selected}/{total})";
+    }
+
+    [RelayCommand]
+    private void SelectAllCompareCommitters()
+    {
+        foreach (var c in CompareCommitters)
+            c.IsSelected = true;
+    }
+
+    [RelayCommand]
+    private void ClearAllCompareCommitters()
+    {
+        foreach (var c in CompareCommitters)
+            c.IsSelected = false;
     }
 
     private void ApplyFilters()

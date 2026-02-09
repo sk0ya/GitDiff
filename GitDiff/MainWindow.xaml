@@ -184,6 +184,43 @@
                         <TextBlock Text="Compare" />
                     </StackPanel>
                 </Button>
+                <materialDesign:PopupBox DockPanel.Dock="Right"
+                                         PlacementMode="BottomAndAlignRightEdges"
+                                         StaysOpen="True"
+                                         Margin="8,0,0,0"
+                                         Height="30"
+                                         ToolTip="Compare時のCommitterフィルター">
+                    <materialDesign:PopupBox.ToggleContent>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="AccountFilter" Width="16" Height="16"
+                                                     VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <TextBlock Text="{Binding CompareCommitterLabel}"
+                                       VerticalAlignment="Center" FontSize="12" />
+                        </StackPanel>
+                    </materialDesign:PopupBox.ToggleContent>
+                    <StackPanel MinWidth="200" Margin="8">
+                        <ItemsControl ItemsSource="{Binding CompareCommitters}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Name}"
+                                              IsChecked="{Binding IsSelected}"
+                                              Margin="0,2" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Separator Margin="0,6" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="すべて選択"
+                                    Command="{Binding SelectAllCompareCommittersCommand}"
+                                    Style="{StaticResource MaterialDesignFlatButton}"
+                                    Padding="8,2" Height="26" FontSize="11" />
+                            <Button Content="クリア"
+                                    Command="{Binding ClearAllCompareCommittersCommand}"
+                                    Style="{StaticResource MaterialDesignFlatButton}"
+                                    Padding="8,2" Height="26" FontSize="11" />
+                        </StackPanel>
+                    </StackPanel>
+                </materialDesign:PopupBox>
 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="Base:" VerticalAlignment="Center" Margin="0,0,4,0" FontWeight="SemiBold" />
