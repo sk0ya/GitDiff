@@ -24,90 +24,138 @@
         <converters:NullToBoolConverter x:Key="NullToBoolConverter" />
     </Window.Resources>
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="3*" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="2*" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
-
-        <!-- Header -->
-        <materialDesign:ColorZone Grid.Row="0" Mode="PrimaryMid" Padding="16" materialDesign:ElevationAssist.Elevation="Dp4">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <materialDesign:PackIcon Grid.Column="0" Kind="Git" Width="28" Height="28" VerticalAlignment="Center" Margin="0,0,12,0" />
-                <TextBox Grid.Column="1"
-                         Text="{Binding RepositoryPath, UpdateSourceTrigger=PropertyChanged}"
+    <DockPanel LastChildFill="True">
+        <!-- Top toolbar: Repository path + filters in one compact row -->
+        <ToolBarTray DockPanel.Dock="Top" IsLocked="True">
+            <ToolBar Band="0" BandIndex="0" ClipToBounds="True"
+                     Style="{DynamicResource MaterialDesignToolBar}">
+                <materialDesign:PackIcon Kind="Git" Width="20" Height="20" VerticalAlignment="Center" />
+                <TextBox Text="{Binding RepositoryPath, UpdateSourceTrigger=PropertyChanged}"
                          materialDesign:HintAssist.Hint="リポジトリパス"
                          materialDesign:TextFieldAssist.HasClearButton="True"
-                         Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                         Foreground="White"
-                         materialDesign:HintAssist.Foreground="LightGray"
+                         Width="360"
                          VerticalAlignment="Center"
-                         Margin="0,0,8,0" />
-                <Button Grid.Column="2"
-                        Command="{Binding BrowseRepositoryCommand}"
-                        Content="Browse"
-                        Style="{StaticResource MaterialDesignOutlinedLightButton}" />
-            </Grid>
-        </materialDesign:ColorZone>
-
-        <!-- Filters -->
-        <materialDesign:Card Grid.Row="1" Margin="16,12,16,0" Padding="16">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="16" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
-                <materialDesign:PackIcon Grid.Column="0" Kind="AccountFilter" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <ComboBox Grid.Column="1"
-                          ItemsSource="{Binding Committers}"
+                         Margin="4,0" />
+                <Button Command="{Binding BrowseRepositoryCommand}"
+                        Content="参照"
+                        Style="{StaticResource MaterialDesignFlatButton}"
+                        Padding="8,4" Height="28" />
+                <Separator />
+                <materialDesign:PackIcon Kind="AccountFilter" VerticalAlignment="Center" Width="18" Height="18" />
+                <ComboBox ItemsSource="{Binding Committers}"
                           SelectedItem="{Binding SelectedCommitter}"
                           materialDesign:HintAssist.Hint="Committer"
                           IsEditable="False"
-                          Style="{StaticResource MaterialDesignOutlinedComboBox}"
-                          materialDesign:ComboBoxAssist.ShowSelectedItem="True">
+                          Width="150"
+                          VerticalAlignment="Center"
+                          Margin="4,0">
                     <ComboBox.ContextMenu>
                         <ContextMenu>
                             <MenuItem Header="クリア" Click="ClearCommitterFilter_Click" />
                         </ContextMenu>
                     </ComboBox.ContextMenu>
                 </ComboBox>
-
-                <materialDesign:PackIcon Grid.Column="3" Kind="FolderSearch" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <TextBox Grid.Column="4"
-                         Text="{Binding FolderFilter, UpdateSourceTrigger=PropertyChanged, Delay=300}"
-                         materialDesign:HintAssist.Hint="フォルダパスで絞り込み (例: src/)"
+                <materialDesign:PackIcon Kind="FolderSearch" VerticalAlignment="Center" Width="18" Height="18" Margin="4,0,0,0" />
+                <TextBox Text="{Binding FolderFilter, UpdateSourceTrigger=PropertyChanged, Delay=300}"
+                         materialDesign:HintAssist.Hint="フォルダ絞り込み"
                          materialDesign:TextFieldAssist.HasClearButton="True"
-                         Style="{StaticResource MaterialDesignOutlinedTextBox}" />
-            </Grid>
-        </materialDesign:Card>
+                         Width="160"
+                         VerticalAlignment="Center"
+                         Margin="4,0" />
+            </ToolBar>
+        </ToolBarTray>
 
-        <!-- Commit List -->
-        <materialDesign:Card Grid.Row="2" Margin="16,12,16,0" Padding="0">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
+        <!-- Commit selection bar + Compare + Export -->
+        <DockPanel DockPanel.Dock="Top" Margin="4,4,4,2">
+            <Button DockPanel.Dock="Right"
+                    Command="{Binding ExportCommand}"
+                    Style="{StaticResource MaterialDesignRaisedButton}"
+                    materialDesign:ButtonAssist.CornerRadius="3"
+                    Padding="12,4" Height="30" Margin="4,0,0,0">
+                <StackPanel Orientation="Horizontal">
+                    <materialDesign:PackIcon Kind="Export" Width="16" Height="16" Margin="0,0,4,0" />
+                    <TextBlock Text="Export" />
+                </StackPanel>
+            </Button>
+            <Button DockPanel.Dock="Right"
+                    Command="{Binding BrowseOutputFolderCommand}"
+                    ToolTip="出力先フォルダを選択"
+                    Style="{StaticResource MaterialDesignFlatButton}"
+                    Padding="4,4" Height="28" Margin="2,0,0,0">
+                <materialDesign:PackIcon Kind="FolderOpen" Width="18" Height="18" />
+            </Button>
+            <TextBox DockPanel.Dock="Right"
+                     Text="{Binding OutputPath, UpdateSourceTrigger=PropertyChanged}"
+                     materialDesign:HintAssist.Hint="出力先"
+                     materialDesign:TextFieldAssist.HasClearButton="True"
+                     Width="200"
+                     VerticalAlignment="Center"
+                     Margin="8,0,0,0" />
+            <Button DockPanel.Dock="Right"
+                    Command="{Binding CompareCommand}"
+                    Style="{StaticResource MaterialDesignRaisedSecondaryButton}"
+                    materialDesign:ButtonAssist.CornerRadius="3"
+                    Padding="12,4" Height="30" Margin="8,0,0,0">
+                <StackPanel Orientation="Horizontal">
+                    <materialDesign:PackIcon Kind="Compare" Width="16" Height="16" Margin="0,0,4,0" />
+                    <TextBlock Text="Compare" />
+                </StackPanel>
+            </Button>
 
-                <TextBlock Grid.Row="0" Text="Commits" Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
-                           Margin="16,12,16,8" />
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Base:" VerticalAlignment="Center" Margin="0,0,4,0" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding BaseCommit.DisplayText, FallbackValue='(未選択)'}"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource PrimaryHueMidBrush}" />
+                <materialDesign:PackIcon Kind="ArrowRight" VerticalAlignment="Center" Margin="8,0" Width="18" Height="18" />
+                <TextBlock Text="Target:" VerticalAlignment="Center" Margin="0,0,4,0" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding TargetCommit.DisplayText, FallbackValue='(未選択)'}"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource SecondaryHueMidBrush}" />
+            </StackPanel>
+        </DockPanel>
 
-                <DataGrid Grid.Row="1"
-                          ItemsSource="{Binding Commits}"
+        <!-- Status Bar -->
+        <StatusBar DockPanel.Dock="Bottom">
+            <StatusBar.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                    </Grid>
+                </ItemsPanelTemplate>
+            </StatusBar.ItemsPanel>
+            <StatusBarItem Grid.Column="0">
+                <TextBlock Text="{Binding StatusMessage}" />
+            </StatusBarItem>
+            <StatusBarItem Grid.Column="1">
+                <TextBlock Text="{Binding DiffFileCount, StringFormat='Diff: {0} files'}" Margin="0,0,8,0" />
+            </StatusBarItem>
+            <StatusBarItem Grid.Column="2">
+                <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
+                             IsIndeterminate="True"
+                             Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"
+                             Value="0"
+                             Width="16" Height="16" />
+            </StatusBarItem>
+        </StatusBar>
+
+        <!-- Main content: Commits (top) + DiffFiles (bottom) with splitter -->
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="3*" MinHeight="120" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="2*" MinHeight="100" />
+            </Grid.RowDefinitions>
+
+            <!-- Commits -->
+            <DockPanel Grid.Row="0">
+                <TextBlock DockPanel.Dock="Top" Text="Commits" FontWeight="SemiBold" FontSize="12"
+                           Margin="4,2,4,2" />
+                <DataGrid ItemsSource="{Binding Commits}"
                           AutoGenerateColumns="False"
                           IsReadOnly="True"
                           SelectionMode="Single"
@@ -115,171 +163,79 @@
                           CanUserResizeColumns="True"
                           HeadersVisibility="Column"
                           GridLinesVisibility="Horizontal"
-                          BorderThickness="0"
-                          Margin="0">
+                          BorderThickness="1"
+                          BorderBrush="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}"
+                          RowHeight="28"
+                          FontSize="12">
                     <DataGrid.Columns>
                         <DataGridTemplateColumn Header="" Width="Auto" CanUserSort="False">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" Margin="4,0">
+                                    <StackPanel Orientation="Horizontal">
                                         <Button Style="{StaticResource MaterialDesignFlatButton}"
-                                                Content="Base"
-                                                FontSize="11"
-                                                Padding="4,2"
-                                                Height="24"
+                                                Content="B"
+                                                ToolTip="Set as Base commit"
+                                                FontSize="10"
+                                                Padding="2,0"
+                                                MinWidth="24" Height="20"
                                                 Command="{Binding DataContext.SetBaseCommitCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                 CommandParameter="{Binding}" />
                                         <Button Style="{StaticResource MaterialDesignFlatSecondaryButton}"
-                                                Content="Target"
-                                                FontSize="11"
-                                                Padding="4,2"
-                                                Height="24"
+                                                Content="T"
+                                                ToolTip="Set as Target commit"
+                                                FontSize="10"
+                                                Padding="2,0"
+                                                MinWidth="24" Height="20"
                                                 Command="{Binding DataContext.SetTargetCommitCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}"
-                                                Margin="4,0,0,0" />
+                                                CommandParameter="{Binding}" />
                                     </StackPanel>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Hash" Binding="{Binding ShortHash}" Width="80" />
+                        <DataGridTextColumn Header="Hash" Binding="{Binding ShortHash}" Width="70" />
                         <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*" />
-                        <DataGridTextColumn Header="Author" Binding="{Binding Author}" Width="120" />
-                        <DataGridTextColumn Header="Date" Binding="{Binding DateString}" Width="130" />
+                        <DataGridTextColumn Header="Author" Binding="{Binding Author}" Width="110" />
+                        <DataGridTextColumn Header="Date" Binding="{Binding DateString}" Width="120" />
                     </DataGrid.Columns>
                 </DataGrid>
-            </Grid>
-        </materialDesign:Card>
+            </DockPanel>
 
-        <!-- Selected Commits Info + Compare Button -->
-        <materialDesign:Card Grid.Row="3" Margin="16,12,16,0" Padding="12,8">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+            <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch"
+                          Background="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}"
+                          ResizeDirection="Rows" />
 
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <materialDesign:Chip Content="{Binding BaseCommit.DisplayText, FallbackValue='(Base未選択)'}"
-                                         IconBackground="{DynamicResource PrimaryHueMidBrush}"
-                                         IconForeground="{DynamicResource PrimaryHueMidForegroundBrush}">
-                        <materialDesign:Chip.Icon>
-                            <materialDesign:PackIcon Kind="SourceBranch" />
-                        </materialDesign:Chip.Icon>
-                    </materialDesign:Chip>
-
-                    <materialDesign:PackIcon Kind="ArrowRight" VerticalAlignment="Center" Margin="8,0" Width="24" Height="24" />
-
-                    <materialDesign:Chip Content="{Binding TargetCommit.DisplayText, FallbackValue='(Target未選択)'}"
-                                         IconBackground="{DynamicResource SecondaryHueMidBrush}"
-                                         IconForeground="{DynamicResource SecondaryHueMidForegroundBrush}">
-                        <materialDesign:Chip.Icon>
-                            <materialDesign:PackIcon Kind="SourceBranch" />
-                        </materialDesign:Chip.Icon>
-                    </materialDesign:Chip>
-                </StackPanel>
-
-                <Button Grid.Column="1"
-                        Command="{Binding CompareCommand}"
-                        Style="{StaticResource MaterialDesignRaisedButton}"
-                        materialDesign:ButtonAssist.CornerRadius="4"
-                        Padding="24,8">
-                    <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="Compare" Margin="0,0,8,0" />
-                        <TextBlock Text="Compare" />
-                    </StackPanel>
-                </Button>
-            </Grid>
-        </materialDesign:Card>
-
-        <!-- Diff File List -->
-        <materialDesign:Card Grid.Row="4" Margin="16,12,16,0" Padding="0">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="16,12,16,8">
-                    <TextBlock Text="Diff Files" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" />
-                    <materialDesign:Badged Badge="{Binding DiffFileCount}" Margin="16,0,0,0" VerticalAlignment="Center"
-                                           BadgeColorZoneMode="PrimaryMid" />
-                </StackPanel>
-
-                <DataGrid Grid.Row="1"
-                          ItemsSource="{Binding DiffFiles}"
+            <!-- Diff Files -->
+            <DockPanel Grid.Row="2">
+                <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" FontSize="12" Margin="4,2,4,2">
+                    <Run Text="Diff Files" />
+                    <Run Text="{Binding DiffFileCount, StringFormat='({0})'}" />
+                </TextBlock>
+                <DataGrid ItemsSource="{Binding DiffFiles}"
                           AutoGenerateColumns="False"
                           IsReadOnly="True"
                           CanUserSortColumns="True"
                           CanUserResizeColumns="True"
                           HeadersVisibility="Column"
                           GridLinesVisibility="Horizontal"
-                          BorderThickness="0">
+                          BorderThickness="1"
+                          BorderBrush="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}"
+                          RowHeight="26"
+                          FontSize="12">
                     <DataGrid.Columns>
-                        <DataGridTemplateColumn Header="Status" Width="90" SortMemberPath="StatusText">
+                        <DataGridTemplateColumn Header="Status" Width="70" SortMemberPath="StatusText">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBlock Text="{Binding StatusText}"
                                                Foreground="{Binding Status, Converter={StaticResource StatusToColorConverter}}"
-                                               FontWeight="Bold" />
+                                               FontWeight="Bold" FontSize="11" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
                         <DataGridTextColumn Header="File Path" Binding="{Binding FilePath}" Width="*" />
-                        <DataGridTextColumn Header="Old Path" Binding="{Binding OldPath}" Width="200" />
+                        <DataGridTextColumn Header="Old Path" Binding="{Binding OldPath}" Width="180" />
                     </DataGrid.Columns>
                 </DataGrid>
-            </Grid>
-        </materialDesign:Card>
-
-        <!-- Export Section -->
-        <materialDesign:Card Grid.Row="5" Margin="16,12,16,0" Padding="12,8">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <materialDesign:PackIcon Grid.Column="0" Kind="FolderOpen" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <TextBox Grid.Column="1"
-                         Text="{Binding OutputPath, UpdateSourceTrigger=PropertyChanged}"
-                         materialDesign:HintAssist.Hint="出力先フォルダ"
-                         materialDesign:TextFieldAssist.HasClearButton="True"
-                         Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                         Margin="0,0,8,0" />
-                <Button Grid.Column="2"
-                        Command="{Binding BrowseOutputFolderCommand}"
-                        Content="Browse"
-                        Style="{StaticResource MaterialDesignOutlinedButton}"
-                        Margin="0,0,8,0" />
-                <Button Grid.Column="3"
-                        Command="{Binding ExportCommand}"
-                        Style="{StaticResource MaterialDesignRaisedButton}"
-                        materialDesign:ButtonAssist.CornerRadius="4">
-                    <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="Export" Margin="0,0,8,0" />
-                        <TextBlock Text="Export" />
-                    </StackPanel>
-                </Button>
-            </Grid>
-        </materialDesign:Card>
-
-        <!-- Status Bar -->
-        <materialDesign:ColorZone Grid.Row="6" Mode="PrimaryDark" Padding="16,8" Margin="0,12,0,0">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" VerticalAlignment="Center" />
-                <ProgressBar Grid.Column="1"
-                             Style="{StaticResource MaterialDesignCircularProgressBar}"
-                             IsIndeterminate="True"
-                             Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"
-                             Value="0"
-                             Width="20" Height="20" />
-            </Grid>
-        </materialDesign:ColorZone>
-    </Grid>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
 </Window>
