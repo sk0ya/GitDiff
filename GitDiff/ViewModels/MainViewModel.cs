@@ -52,9 +52,6 @@ public partial class MainViewModel : ObservableObject
     private ObservableCollection<DiffFileInfo> _diffFiles = [];
 
     [ObservableProperty]
-    private string _outputPath = string.Empty;
-
-    [ObservableProperty]
     private string _statusMessage = "Ready";
 
     [ObservableProperty]
@@ -192,28 +189,8 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void BrowseOutputFolder()
-    {
-        var dialog = new OpenFolderDialog
-        {
-            Title = "出力先フォルダを選択"
-        };
-
-        if (dialog.ShowDialog() == true)
-        {
-            OutputPath = dialog.FolderName;
-        }
-    }
-
-    [RelayCommand]
     private async Task Export()
     {
-        if (string.IsNullOrWhiteSpace(OutputPath))
-        {
-            StatusMessage = "出力先フォルダを指定してください。";
-            return;
-        }
-
         if (DiffFiles.Count == 0)
         {
             StatusMessage = "エクスポートする差分ファイルがありません。";
@@ -221,6 +198,13 @@ public partial class MainViewModel : ObservableObject
         }
 
         if (TargetCommit == null) return;
+
+        var dialog = new OpenFolderDialog
+        {
+            Title = "出力先フォルダを選択"
+        };
+
+        if (dialog.ShowDialog() != true) return;
 
         IsLoading = true;
         StatusMessage = "エクスポート中...";
@@ -230,7 +214,7 @@ public partial class MainViewModel : ObservableObject
             var repoPath = RepositoryPath;
             var commitHash = TargetCommit.Hash;
             var files = DiffFiles.ToList();
-            var outputPath = OutputPath;
+            var outputPath = dialog.FolderName;
 
             var count = await Task.Run(() =>
                 _fileExportService.ExportDiffFiles(repoPath, commitHash, files, outputPath));

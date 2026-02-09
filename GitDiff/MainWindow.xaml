@@ -66,56 +66,6 @@
             </ToolBar>
         </ToolBarTray>
 
-        <!-- Commit selection bar + Compare + Export -->
-        <DockPanel DockPanel.Dock="Top" Margin="4,4,4,2">
-            <Button DockPanel.Dock="Right"
-                    Command="{Binding ExportCommand}"
-                    Style="{StaticResource MaterialDesignRaisedButton}"
-                    materialDesign:ButtonAssist.CornerRadius="3"
-                    Padding="12,4" Height="30" Margin="4,0,0,0">
-                <StackPanel Orientation="Horizontal">
-                    <materialDesign:PackIcon Kind="Export" Width="16" Height="16" Margin="0,0,4,0" />
-                    <TextBlock Text="Export" />
-                </StackPanel>
-            </Button>
-            <Button DockPanel.Dock="Right"
-                    Command="{Binding BrowseOutputFolderCommand}"
-                    ToolTip="出力先フォルダを選択"
-                    Style="{StaticResource MaterialDesignFlatButton}"
-                    Padding="4,4" Height="28" Margin="2,0,0,0">
-                <materialDesign:PackIcon Kind="FolderOpen" Width="18" Height="18" />
-            </Button>
-            <TextBox DockPanel.Dock="Right"
-                     Text="{Binding OutputPath, UpdateSourceTrigger=PropertyChanged}"
-                     materialDesign:HintAssist.Hint="出力先"
-                     materialDesign:TextFieldAssist.HasClearButton="True"
-                     Width="200"
-                     VerticalAlignment="Center"
-                     Margin="8,0,0,0" />
-            <Button DockPanel.Dock="Right"
-                    Command="{Binding CompareCommand}"
-                    Style="{StaticResource MaterialDesignRaisedSecondaryButton}"
-                    materialDesign:ButtonAssist.CornerRadius="3"
-                    Padding="12,4" Height="30" Margin="8,0,0,0">
-                <StackPanel Orientation="Horizontal">
-                    <materialDesign:PackIcon Kind="Compare" Width="16" Height="16" Margin="0,0,4,0" />
-                    <TextBlock Text="Compare" />
-                </StackPanel>
-            </Button>
-
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="Base:" VerticalAlignment="Center" Margin="0,0,4,0" FontWeight="SemiBold" />
-                <TextBlock Text="{Binding BaseCommit.DisplayText, FallbackValue='(未選択)'}"
-                           VerticalAlignment="Center"
-                           Foreground="{DynamicResource PrimaryHueMidBrush}" />
-                <materialDesign:PackIcon Kind="ArrowRight" VerticalAlignment="Center" Margin="8,0" Width="18" Height="18" />
-                <TextBlock Text="Target:" VerticalAlignment="Center" Margin="0,0,4,0" FontWeight="SemiBold" />
-                <TextBlock Text="{Binding TargetCommit.DisplayText, FallbackValue='(未選択)'}"
-                           VerticalAlignment="Center"
-                           Foreground="{DynamicResource SecondaryHueMidBrush}" />
-            </StackPanel>
-        </DockPanel>
-
         <!-- Status Bar -->
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBar.ItemsPanel>
@@ -148,6 +98,7 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="3*" MinHeight="120" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="2*" MinHeight="100" />
             </Grid.RowDefinitions>
@@ -211,8 +162,44 @@
                           Background="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}"
                           ResizeDirection="Rows" />
 
+            <!-- Base/Target + Compare/Export bar -->
+            <DockPanel Grid.Row="2" Margin="4,4,4,2">
+                <Button DockPanel.Dock="Right"
+                        Command="{Binding ExportCommand}"
+                        Style="{StaticResource MaterialDesignRaisedButton}"
+                        materialDesign:ButtonAssist.CornerRadius="3"
+                        Padding="12,4" Height="30" Margin="4,0,0,0">
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="Export" Width="16" Height="16" Margin="0,0,4,0" />
+                        <TextBlock Text="Export" />
+                    </StackPanel>
+                </Button>
+                <Button DockPanel.Dock="Right"
+                        Command="{Binding CompareCommand}"
+                        Style="{StaticResource MaterialDesignRaisedSecondaryButton}"
+                        materialDesign:ButtonAssist.CornerRadius="3"
+                        Padding="12,4" Height="30" Margin="8,0,0,0">
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="Compare" Width="16" Height="16" Margin="0,0,4,0" />
+                        <TextBlock Text="Compare" />
+                    </StackPanel>
+                </Button>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Base:" VerticalAlignment="Center" Margin="0,0,4,0" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding BaseCommit.DisplayText, FallbackValue='(未選択)'}"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource PrimaryHueMidBrush}" />
+                    <materialDesign:PackIcon Kind="ArrowRight" VerticalAlignment="Center" Margin="8,0" Width="18" Height="18" />
+                    <TextBlock Text="Target:" VerticalAlignment="Center" Margin="0,0,4,0" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding TargetCommit.DisplayText, FallbackValue='(未選択)'}"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SecondaryHueMidBrush}" />
+                </StackPanel>
+            </DockPanel>
+
             <!-- Diff Files -->
-            <DockPanel Grid.Row="2">
+            <DockPanel Grid.Row="3">
                 <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" FontSize="12" Margin="4,2,4,2">
                     <Run Text="Diff Files" />
                     <Run Text="{Binding DiffFileCount, StringFormat='({0})'}" />
