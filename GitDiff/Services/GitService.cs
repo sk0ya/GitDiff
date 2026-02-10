@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.RegularExpressions;
 using GitDiff.Models;
 using LibGit2Sharp;
 
@@ -188,6 +189,74 @@ public class GitService : IGitService
         using var ms = new MemoryStream();
         stream.CopyTo(ms);
         return ms.ToArray();
+    }
+
+    public IReadOnlyList<int> GetChangedLineNumbers(string repoPath, string baseCommitHash, string targetCommitHash, string filePath)
+    {
+        using var repo = new Repository(repoPath);
+        var baseCommit = repo.Lookup<Commit>(baseCommitHash);
+        var targetCommit = repo.Lookup<Commit>(targetCommitHash);
+
+        if (baseCommit == null || targetCommit == null)
+            return [];
+
+        // For Added files, return all line numbers
+        var treeEntry = targetCommit[filePath];
+        if (treeEntry == null) return [];
+
+        var baseEntry = baseCommit[filePath];
+        if (baseEntry == null)
+        {
+            // File is new — all lines are changed
+            var blob = (Blob)treeEntry.Target;
+            using var reader = new StreamReader(blob.GetContentStream());
+            var content = reader.ReadToEnd();
+            var lineCount = content.Split('\n').Length;
+            return Enumerable.Range(1, lineCount).ToList();
+        }
+
+        // Get patch for this specific file
+        var patch = repo.Diff.Compare<Patch>(baseCommit.Tree, targetCommit.Tree, [filePath]);
+        var patchEntry = patch[filePath];
+        if (patchEntry == null) return [];
+
+        return ParseChangedLineNumbers(patchEntry.Patch);
+    }
+
+    private static IReadOnlyList<int> ParseChangedLineNumbers(string patchText)
+    {
+        var changedLines = new List<int>();
+        var hunkHeaderRegex = new Regex(@"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@");
+        var currentLine = 0;
+
+        foreach (var line in patchText.Split('\n'))
+        {
+            var match = hunkHeaderRegex.Match(line);
+            if (match.Success)
+            {
+                currentLine = int.Parse(match.Groups[1].Value);
+                continue;
+            }
+
+            if (currentLine == 0) continue;
+
+            if (line.StartsWith('+'))
+            {
+                changedLines.Add(currentLine);
+                currentLine++;
+            }
+            else if (line.StartsWith('-'))
+            {
+                // Deleted line — don't increment target line number
+            }
+            else
+            {
+                // Context line
+                currentLine++;
+            }
+        }
+
+        return changedLines;
     }
 
     private static ChangeStatus MapStatus(ChangeKind kind) => kind switch

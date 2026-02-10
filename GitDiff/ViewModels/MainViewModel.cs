@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Text;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,6 +14,7 @@ public partial class MainViewModel : ObservableObject
 {
     private readonly IGitService _gitService;
     private readonly IFileExportService _fileExportService;
+    private readonly IC0CaseService _c0CaseService;
 
     private List<CommitInfo> _allCommits = [];
     private List<DiffFileInfo> _allDiffFiles = [];
@@ -20,14 +22,15 @@ public partial class MainViewModel : ObservableObject
     private bool _suppressFolderFilter;
 
     public MainViewModel()
-        : this(new GitService(), new FileExportService(new GitService()))
+        : this(new GitService(), new FileExportService(new GitService()), new C0CaseService())
     {
     }
 
-    public MainViewModel(IGitService gitService, IFileExportService fileExportService)
+    public MainViewModel(IGitService gitService, IFileExportService fileExportService, IC0CaseService c0CaseService)
     {
         _gitService = gitService;
         _fileExportService = fileExportService;
+        _c0CaseService = c0CaseService;
     }
 
     [ObservableProperty]
@@ -242,6 +245,87 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             StatusMessage = $"エクスポートエラー: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task GenerateC0Cases()
+    {
+        if (DiffFiles.Count == 0 || BaseCommit == null || TargetCommit == null)
+        {
+            StatusMessage = "差分ファイルがありません。";
+            return;
+        }
+
+        IsLoading = true;
+        StatusMessage = "C0ケースを生成中...";
+
+        try
+        {
+            var csFiles = DiffFiles
+                .Where(f => f.FilePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+                            && f.Status != ChangeStatus.Deleted)
+                .ToList();
+
+            if (csFiles.Count == 0)
+            {
+                StatusMessage = "対象の.csファイルがありません。";
+                return;
+            }
+
+            var repoPath = RepositoryPath;
+            var baseHash = BaseCommit.Hash;
+            var targetHash = TargetCommit.Hash;
+
+            var allCases = await Task.Run(() =>
+            {
+                var cases = new List<C0TestCase>();
+
+                foreach (var file in csFiles)
+                {
+                    var changedLines = _gitService.GetChangedLineNumbers(repoPath, baseHash, targetHash, file.FilePath);
+                    if (changedLines.Count == 0) continue;
+
+                    var contentBytes = _gitService.GetFileContent(repoPath, targetHash, file.FilePath);
+                    if (contentBytes == null) continue;
+
+                    var content = Encoding.UTF8.GetString(contentBytes);
+                    var fileCases = _c0CaseService.GenerateC0Cases(content, changedLines);
+                    cases.AddRange(fileCases);
+                }
+
+                return cases;
+            });
+
+            if (allCases.Count == 0)
+            {
+                StatusMessage = "分岐条件が見つかりませんでした。";
+                return;
+            }
+
+            // Build TSV (同一クラス名・メソッド名は省略)
+            var sb = new StringBuilder();
+            sb.AppendLine("クラス名\tメソッド名\t分岐条件");
+            string prevClass = "", prevMethod = "";
+            foreach (var c in allCases)
+            {
+                var showClass = c.ClassName != prevClass ? c.ClassName : "";
+                var showMethod = (c.ClassName != prevClass || c.MethodName != prevMethod) ? c.MethodName : "";
+                sb.AppendLine($"{showClass}\t{showMethod}\t{c.BranchCondition}");
+                prevClass = c.ClassName;
+                prevMethod = c.MethodName;
+            }
+
+            Clipboard.SetText(sb.ToString());
+            StatusMessage = $"C0ケースをクリップボードにコピーしました。({allCases.Count} 件)";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"C0ケース生成エラー: {ex.Message}";
         }
         finally
         {
