@@ -11,6 +11,7 @@
         Height="800" Width="1100"
         MinHeight="600" MinWidth="800"
         WindowStartupLocation="CenterScreen"
+        Icon="pack://application:,,,/GitDiff.ico"
         Background="{DynamicResource MaterialDesign.Brush.Background}"
         FontFamily="{materialDesign:MaterialDesignFont}">
 
