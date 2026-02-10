@@ -36,7 +36,7 @@ public class GitService : IGitService
             .ToList();
     }
 
-    public IReadOnlyList<DiffFileInfo> GetDiffFiles(string repoPath, string baseCommitHash, string targetCommitHash)
+    public IReadOnlyList<DiffFileInfo> GetDiffFiles(string repoPath, string baseCommitHash, string targetCommitHash, bool excludeMergeCommits = false)
     {
         using var repo = new Repository(repoPath);
         var baseCommit = repo.Lookup<Commit>(baseCommitHash);
@@ -45,17 +45,23 @@ public class GitService : IGitService
         if (baseCommit == null || targetCommit == null)
             return [];
 
-        var changes = repo.Diff.Compare<TreeChanges>(baseCommit.Tree, targetCommit.Tree);
-
-        return changes.Select(change => new DiffFileInfo
+        if (!excludeMergeCommits)
         {
-            FilePath = change.Path,
-            OldPath = change.OldPath != change.Path ? change.OldPath : null,
-            Status = MapStatus(change.Status)
-        }).ToList();
+            var changes = repo.Diff.Compare<TreeChanges>(baseCommit.Tree, targetCommit.Tree);
+
+            return changes.Select(change => new DiffFileInfo
+            {
+                FilePath = change.Path,
+                OldPath = change.OldPath != change.Path ? change.OldPath : null,
+                Status = MapStatus(change.Status)
+            }).ToList();
+        }
+
+        // Walk commits individually, skipping merge commits
+        return GetDiffFilesWalkingCommits(repo, baseCommit, targetCommit, committerFilter: null, excludeMergeCommits: true);
     }
 
-    public IReadOnlyList<DiffFileInfo> GetDiffFiles(string repoPath, string baseCommitHash, string targetCommitHash, IReadOnlyList<string> committerFilter)
+    public IReadOnlyList<DiffFileInfo> GetDiffFiles(string repoPath, string baseCommitHash, string targetCommitHash, IReadOnlyList<string> committerFilter, bool excludeMergeCommits = false)
     {
         using var repo = new Repository(repoPath);
         var baseCommit = repo.Lookup<Commit>(baseCommitHash);
@@ -64,6 +70,13 @@ public class GitService : IGitService
         if (baseCommit == null || targetCommit == null)
             return [];
 
+        return GetDiffFilesWalkingCommits(repo, baseCommit, targetCommit, committerFilter, excludeMergeCommits);
+    }
+
+    private IReadOnlyList<DiffFileInfo> GetDiffFilesWalkingCommits(
+        Repository repo, Commit baseCommit, Commit targetCommit,
+        IReadOnlyList<string>? committerFilter, bool excludeMergeCommits)
+    {
         // Walk commits between base and target, oldest first
         var commitFilter = new CommitFilter
         {
@@ -72,16 +85,22 @@ public class GitService : IGitService
             SortBy = CommitSortStrategies.Topological | CommitSortStrategies.Reverse
         };
 
-        var committerSet = new HashSet<string>(committerFilter, StringComparer.OrdinalIgnoreCase);
+        var committerSet = committerFilter != null
+            ? new HashSet<string>(committerFilter, StringComparer.OrdinalIgnoreCase)
+            : null;
         var result = new Dictionary<string, DiffFileInfo>(StringComparer.OrdinalIgnoreCase);
 
         // Analyze each commit individually and aggregate results
         foreach (var commit in repo.Commits.QueryBy(commitFilter))
         {
-            if (!committerSet.Contains(commit.Author.Name))
+            if (committerSet != null && !committerSet.Contains(commit.Author.Name))
                 continue;
 
             var parents = commit.Parents.ToList();
+
+            if (excludeMergeCommits && parents.Count > 1)
+                continue;
+
             TreeChanges treeDiff;
 
             if (parents.Count == 0)

@@ -183,6 +183,13 @@
                             <TextBlock Text="Compare" />
                         </StackPanel>
                     </Button>
+                    <CheckBox DockPanel.Dock="Right"
+                              IsChecked="{Binding ExcludeMergeCommits}"
+                              Content="Mergeコミットを除外"
+                              VerticalAlignment="Center"
+                              Margin="8,0,0,0"
+                              FontSize="12"
+                              ToolTip="マージコミットを差分検出から除外します" />
                     <materialDesign:PopupBox DockPanel.Dock="Right"
                                              PlacementMode="BottomAndAlignRightEdges"
                                              StaysOpen="True"

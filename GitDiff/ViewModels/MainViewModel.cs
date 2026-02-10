@@ -67,6 +67,9 @@ public partial class MainViewModel : ObservableObject
     private bool _isLoading;
 
     [ObservableProperty]
+    private bool _excludeMergeCommits = true;
+
+    [ObservableProperty]
     private int _diffFileCount;
 
     public bool HasBaseCommit => BaseCommit != null;
@@ -178,12 +181,13 @@ public partial class MainViewModel : ObservableObject
                 .ToList();
             var useCommitterFilter = selectedCommitters.Count > 0
                 && selectedCommitters.Count < CompareCommitters.Count;
+            var excludeMerge = ExcludeMergeCommits;
 
             var files = await Task.Run(() =>
             {
                 return useCommitterFilter
-                    ? _gitService.GetDiffFiles(repoPath, baseHash, targetHash, selectedCommitters)
-                    : _gitService.GetDiffFiles(repoPath, baseHash, targetHash);
+                    ? _gitService.GetDiffFiles(repoPath, baseHash, targetHash, selectedCommitters, excludeMerge)
+                    : _gitService.GetDiffFiles(repoPath, baseHash, targetHash, excludeMerge);
             });
 
             _allDiffFiles = files.ToList();
