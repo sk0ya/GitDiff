@@ -54,6 +54,15 @@ public partial class MainViewModel : ObservableObject
     private string _committerFilterLabel = "Committer(All)";
 
     [ObservableProperty]
+    private DateTime? _dateFrom;
+
+    [ObservableProperty]
+    private DateTime? _dateTo;
+
+    [ObservableProperty]
+    private string _dateFilterLabel = "Date(All)";
+
+    [ObservableProperty]
     private CommitInfo? _baseCommit;
 
     [ObservableProperty]
@@ -87,6 +96,18 @@ public partial class MainViewModel : ObservableObject
     public bool HasTargetCommit => TargetCommit != null;
 
     partial void OnCommitterFilterTextChanged(string value) => UpdateFilteredCommitters();
+
+    partial void OnDateFromChanged(DateTime? value)
+    {
+        UpdateDateFilterLabel();
+        ApplyFilters();
+    }
+
+    partial void OnDateToChanged(DateTime? value)
+    {
+        UpdateDateFilterLabel();
+        ApplyFilters();
+    }
 
     partial void OnBaseCommitChanged(CommitInfo? value)
     {
@@ -590,6 +611,33 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ClearDateFilter()
+    {
+        DateFrom = null;
+        DateTo = null;
+    }
+
+    private void UpdateDateFilterLabel()
+    {
+        if (DateFrom == null && DateTo == null)
+        {
+            DateFilterLabel = "Date(All)";
+        }
+        else if (DateFrom != null && DateTo != null)
+        {
+            DateFilterLabel = $"Date({DateFrom:yyyy/MM/dd}～{DateTo:yyyy/MM/dd})";
+        }
+        else if (DateFrom != null)
+        {
+            DateFilterLabel = $"Date({DateFrom:yyyy/MM/dd}～)";
+        }
+        else
+        {
+            DateFilterLabel = $"Date(～{DateTo:yyyy/MM/dd})";
+        }
+    }
+
+    [RelayCommand]
     private void SelectAllCommitters()
     {
         foreach (var c in FilterCommitters)
@@ -614,6 +662,16 @@ public partial class MainViewModel : ObservableObject
             var selectedNames = new HashSet<string>(
                 FilterCommitters.Where(c => c.IsSelected).Select(c => c.Name));
             filtered = filtered.Where(c => selectedNames.Contains(c.Author));
+        }
+
+        if (DateFrom is { } from)
+        {
+            filtered = filtered.Where(c => c.Date.LocalDateTime.Date >= from.Date);
+        }
+
+        if (DateTo is { } to)
+        {
+            filtered = filtered.Where(c => c.Date.LocalDateTime.Date <= to.Date);
         }
 
         Commits = new ObservableCollection<CommitInfo>(filtered);

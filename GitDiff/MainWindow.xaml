@@ -92,6 +92,45 @@
                         </StackPanel>
                     </StackPanel>
                 </materialDesign:PopupBox>
+                <materialDesign:PopupBox StaysOpen="True"
+                                         PlacementMode="BottomAndAlignLeftEdges"
+                                         ToolTip="日付フィルター"
+                                         materialDesign:ElevationAssist.Elevation="Dp0">
+                    <materialDesign:PopupBox.ToggleContent>
+                        <Border BorderBrush="{DynamicResource MaterialDesign.Brush.ForegroundLight}"
+                                BorderThickness="1" CornerRadius="3" Padding="8,4">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="CalendarRange" Width="16" Height="16"
+                                                         VerticalAlignment="Center" Margin="0,0,4,0"
+                                                         Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
+                                <TextBlock Text="{Binding DateFilterLabel}"
+                                           VerticalAlignment="Center" FontSize="12"
+                                           Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
+                                <materialDesign:PackIcon Kind="ChevronDown" Width="14" Height="14"
+                                                         VerticalAlignment="Center" Margin="4,0,0,0"
+                                                         Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
+                            </StackPanel>
+                        </Border>
+                    </materialDesign:PopupBox.ToggleContent>
+                    <StackPanel MinWidth="220" Margin="8">
+                        <TextBlock Text="From" FontSize="11" Margin="0,0,0,2"
+                                   Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
+                        <DatePicker SelectedDate="{Binding DateFrom}"
+                                    materialDesign:HintAssist.Hint="開始日"
+                                    FontSize="12" Margin="0,0,0,8" />
+                        <TextBlock Text="To" FontSize="11" Margin="0,0,0,2"
+                                   Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
+                        <DatePicker SelectedDate="{Binding DateTo}"
+                                    materialDesign:HintAssist.Hint="終了日"
+                                    FontSize="12" Margin="0,0,0,4" />
+                        <Separator Margin="0,6" />
+                        <Button Content="クリア"
+                                Command="{Binding ClearDateFilterCommand}"
+                                Style="{StaticResource MaterialDesignFlatButton}"
+                                HorizontalAlignment="Right"
+                                Padding="8,2" Height="26" FontSize="11" />
+                    </StackPanel>
+                </materialDesign:PopupBox>
             </ToolBar>
         </ToolBarTray>
 
