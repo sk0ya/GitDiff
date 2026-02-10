@@ -280,6 +280,11 @@ public class GitService : IGitService
         foreach (var commit in repo.Commits.QueryBy(filter))
         {
             var parents = commit.Parents.ToList();
+
+            // Skip merge commits
+            if (parents.Count > 1)
+                continue;
+
             TreeChanges changes;
 
             if (parents.Count == 0)
@@ -351,8 +356,10 @@ public class GitService : IGitService
         var oldLine = 0;
         var newLine = 0;
 
-        foreach (var line in patchText.Split('\n'))
+        foreach (var rawLine in patchText.Split('\n'))
         {
+            var line = rawLine.TrimEnd('\r');
+
             var match = hunkHeaderRegex.Match(line);
             if (match.Success)
             {
@@ -388,7 +395,7 @@ public class GitService : IGitService
                 });
                 oldLine++;
             }
-            else if (line.StartsWith(' ') || (line.Length == 0 && oldLine > 0))
+            else if (line.StartsWith(' '))
             {
                 result.Add(new DiffLine
                 {
