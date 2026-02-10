@@ -15,6 +15,9 @@ public partial class MainViewModel : ObservableObject
     private readonly IFileExportService _fileExportService;
 
     private List<CommitInfo> _allCommits = [];
+    private List<DiffFileInfo> _allDiffFiles = [];
+    private Dictionary<string, FolderTreeNode> _folderNodeLookup = new();
+    private bool _suppressFolderFilter;
 
     public MainViewModel()
         : this(new GitService(), new FileExportService(new GitService()))
@@ -40,9 +43,6 @@ public partial class MainViewModel : ObservableObject
     private string? _selectedCommitter;
 
     [ObservableProperty]
-    private string _folderFilter = string.Empty;
-
-    [ObservableProperty]
     private CommitInfo? _baseCommit;
 
     [ObservableProperty]
@@ -53,6 +53,9 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private string _compareCommitterLabel = "Committer(All)";
+
+    [ObservableProperty]
+    private ObservableCollection<FolderTreeNode> _folderTree = [];
 
     [ObservableProperty]
     private ObservableCollection<DiffFileInfo> _diffFiles = [];
@@ -70,7 +73,6 @@ public partial class MainViewModel : ObservableObject
     public bool HasTargetCommit => TargetCommit != null;
 
     partial void OnSelectedCommitterChanged(string? value) => ApplyFilters();
-    partial void OnFolderFilterChanged(string value) => ApplyFilters();
 
     partial void OnBaseCommitChanged(CommitInfo? value)
     {
@@ -130,9 +132,11 @@ public partial class MainViewModel : ObservableObject
                 {
                     Committers = new ObservableCollection<string>(committers);
                     SelectedCommitter = null;
-                    FolderFilter = string.Empty;
                     BaseCommit = null;
                     TargetCommit = null;
+                    _allDiffFiles = [];
+                    FolderTree = [];
+                    _folderNodeLookup = new();
                     DiffFiles = [];
                     DiffFileCount = 0;
                     ApplyFilters();
@@ -166,7 +170,6 @@ public partial class MainViewModel : ObservableObject
             var baseHash = BaseCommit.Hash;
             var targetHash = TargetCommit.Hash;
             var repoPath = RepositoryPath;
-            var folderFilter = FolderFilter;
 
             // Get selected committers (empty or all selected = no filter)
             var selectedCommitters = CompareCommitters
@@ -178,23 +181,16 @@ public partial class MainViewModel : ObservableObject
 
             var files = await Task.Run(() =>
             {
-                var diffs = useCommitterFilter
+                return useCommitterFilter
                     ? _gitService.GetDiffFiles(repoPath, baseHash, targetHash, selectedCommitters)
                     : _gitService.GetDiffFiles(repoPath, baseHash, targetHash);
-
-                if (!string.IsNullOrWhiteSpace(folderFilter))
-                {
-                    diffs = diffs
-                        .Where(f => f.FilePath.StartsWith(folderFilter, StringComparison.OrdinalIgnoreCase))
-                        .ToList();
-                }
-
-                return diffs;
             });
 
-            DiffFiles = new ObservableCollection<DiffFileInfo>(files);
-            DiffFileCount = files.Count;
-            StatusMessage = $"差分ファイル: {files.Count} 件";
+            _allDiffFiles = files.ToList();
+            BuildFolderTree(_allDiffFiles);
+            ApplyFolderFilter();
+
+            StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件";
         }
         catch (Exception ex)
         {
@@ -247,6 +243,167 @@ public partial class MainViewModel : ObservableObject
         {
             IsLoading = false;
         }
+    }
+
+    private const string RootFolderKey = "";
+
+    private void BuildFolderTree(List<DiffFileInfo> files)
+    {
+        var lookup = new Dictionary<string, FolderTreeNode>();
+        var topLevel = new List<FolderTreeNode>();
+        var hasRootFiles = false;
+
+        foreach (var file in files)
+        {
+            var parts = file.FilePath.Split('/');
+            if (parts.Length <= 1)
+            {
+                hasRootFiles = true;
+                continue;
+            }
+
+            var folderParts = parts[..^1];
+            var currentPath = "";
+            FolderTreeNode? parentNode = null;
+
+            for (var i = 0; i < folderParts.Length; i++)
+            {
+                currentPath = i == 0 ? folderParts[i] : currentPath + "/" + folderParts[i];
+
+                if (!lookup.TryGetValue(currentPath, out var node))
+                {
+                    node = new FolderTreeNode
+                    {
+                        Name = folderParts[i],
+                        FullPath = currentPath,
+                        Parent = parentNode
+                    };
+                    lookup[currentPath] = node;
+
+                    if (parentNode != null)
+                        parentNode.Children.Add(node);
+                    else
+                        topLevel.Add(node);
+                }
+
+                parentNode = node;
+            }
+        }
+
+        if (hasRootFiles)
+        {
+            var rootNode = new FolderTreeNode { Name = "(root)", FullPath = RootFolderKey };
+            lookup[RootFolderKey] = rootNode;
+            topLevel.Insert(0, rootNode);
+        }
+
+        CompressFolderTree(topLevel);
+        _folderNodeLookup = BuildFolderNodeLookup(topLevel);
+        SubscribeToTreeNodes(topLevel);
+        FolderTree = new ObservableCollection<FolderTreeNode>(topLevel);
+    }
+
+    private static void CompressFolderTree(IList<FolderTreeNode> nodes)
+    {
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            var node = nodes[i];
+
+            while (node.Children.Count == 1)
+            {
+                var child = node.Children[0];
+                node.Name = node.Name + "/" + child.Name;
+                node.FullPath = child.FullPath;
+                node.Children.Clear();
+                foreach (var grandchild in child.Children)
+                {
+                    grandchild.Parent = node;
+                    node.Children.Add(grandchild);
+                }
+            }
+
+            CompressFolderTree(node.Children);
+        }
+    }
+
+    private static Dictionary<string, FolderTreeNode> BuildFolderNodeLookup(
+        IEnumerable<FolderTreeNode> nodes, string parentPath = "")
+    {
+        var lookup = new Dictionary<string, FolderTreeNode>();
+
+        foreach (var node in nodes)
+        {
+            // Map all intermediate paths within this compressed node to it
+            var relative = parentPath == ""
+                ? node.FullPath
+                : node.FullPath[(parentPath.Length + 1)..];
+            var parts = relative.Split('/');
+            var current = parentPath;
+
+            foreach (var part in parts)
+            {
+                current = current == "" ? part : current + "/" + part;
+                lookup[current] = node;
+            }
+
+            foreach (var kv in BuildFolderNodeLookup(node.Children, node.FullPath))
+                lookup[kv.Key] = kv.Value;
+        }
+
+        return lookup;
+    }
+
+    private void SubscribeToTreeNodes(IEnumerable<FolderTreeNode> nodes)
+    {
+        foreach (var node in nodes)
+        {
+            node.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(FolderTreeNode.IsSelected) && !_suppressFolderFilter)
+                    ApplyFolderFilter();
+            };
+            SubscribeToTreeNodes(node.Children);
+        }
+    }
+
+    private void ApplyFolderFilter()
+    {
+        var filtered = _allDiffFiles.Where(f =>
+        {
+            var lastSlash = f.FilePath.LastIndexOf('/');
+            var folderPath = lastSlash < 0 ? RootFolderKey : f.FilePath[..lastSlash];
+            return IsFolderSelected(folderPath);
+        }).ToList();
+
+        DiffFiles = new ObservableCollection<DiffFileInfo>(filtered);
+        DiffFileCount = filtered.Count;
+    }
+
+    private bool IsFolderSelected(string folderPath)
+    {
+        if (_folderNodeLookup.TryGetValue(folderPath, out var node))
+            return node.IsSelected != false;
+        return true;
+    }
+
+    [RelayCommand]
+    private void SelectAllFolders()
+    {
+        _suppressFolderFilter = true;
+        foreach (var node in FolderTree)
+            node.IsSelected = true;
+        _suppressFolderFilter = false;
+        ApplyFolderFilter();
+    }
+
+    [RelayCommand]
+    private void ClearAllFolders()
+    {
+        _suppressFolderFilter = true;
+        foreach (var node in FolderTree)
+            node.IsSelected = false;
+        _suppressFolderFilter = false;
+        ApplyFolderFilter();
     }
 
     private void UpdateCompareCommitters()

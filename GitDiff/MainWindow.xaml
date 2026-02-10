@@ -56,13 +56,6 @@
                         </ContextMenu>
                     </ComboBox.ContextMenu>
                 </ComboBox>
-                <materialDesign:PackIcon Kind="FolderSearch" VerticalAlignment="Center" Width="18" Height="18" Margin="4,0,0,0" />
-                <TextBox Text="{Binding FolderFilter, UpdateSourceTrigger=PropertyChanged, Delay=300}"
-                         materialDesign:HintAssist.Hint="フォルダ絞り込み"
-                         materialDesign:TextFieldAssist.HasClearButton="True"
-                         Width="160"
-                         VerticalAlignment="Center"
-                         Margin="4,0" />
             </ToolBar>
         </ToolBarTray>
 
@@ -241,30 +234,85 @@
                     <Run Text="Diff Files" />
                     <Run Text="{Binding DiffFileCount, StringFormat='({0})'}" />
                 </TextBlock>
-                <DataGrid ItemsSource="{Binding DiffFiles}"
-                          AutoGenerateColumns="False"
-                          IsReadOnly="True"
-                          CanUserSortColumns="True"
-                          CanUserResizeColumns="True"
-                          HeadersVisibility="Column"
-                          GridLinesVisibility="Horizontal"
-                          BorderThickness="1"
-                          BorderBrush="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}"
-                          FontSize="12">
-                    <DataGrid.Columns>
-                        <DataGridTemplateColumn Header="Status" Width="70" SortMemberPath="StatusText">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding StatusText}"
-                                               Foreground="{Binding Status, Converter={StaticResource StatusToColorConverter}}"
-                                               FontWeight="Bold" FontSize="11" />
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="File Path" Binding="{Binding FilePath}" Width="*" />
-                        <DataGridTextColumn Header="Old Path" Binding="{Binding OldPath}" Width="180" />
-                    </DataGrid.Columns>
-                </DataGrid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220" MinWidth="120" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Folder Tree -->
+                    <DockPanel Grid.Column="0">
+                        <DockPanel DockPanel.Dock="Top" Margin="2,2,2,0">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button Content="All"
+                                        Command="{Binding SelectAllFoldersCommand}"
+                                        Style="{StaticResource MaterialDesignToolButton}"
+                                        FontSize="10" Height="20" Padding="4,0" />
+                                <Button Content="Clear"
+                                        Command="{Binding ClearAllFoldersCommand}"
+                                        Style="{StaticResource MaterialDesignToolButton}"
+                                        FontSize="10" Height="20" Padding="4,0" />
+                            </StackPanel>
+                            <TextBlock Text="Folders" FontWeight="SemiBold" FontSize="11"
+                                       VerticalAlignment="Center" />
+                        </DockPanel>
+                        <TreeView ItemsSource="{Binding FolderTree}"
+                                  BorderThickness="1"
+                                  BorderBrush="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}"
+                                  Padding="2"
+                                  FontSize="12">
+                            <TreeView.Resources>
+                                <Style TargetType="TreeViewItem">
+                                    <Setter Property="IsExpanded" Value="True" />
+                                    <Setter Property="Padding" Value="1,0" />
+                                </Style>
+                            </TreeView.Resources>
+                            <TreeView.ItemTemplate>
+                                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                    <CheckBox IsChecked="{Binding IsSelected}"
+                                              Content="{Binding Name}"
+                                              Margin="0" Padding="2,0"
+                                              MinHeight="0" MinWidth="0" />
+                                </HierarchicalDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
+                    </DockPanel>
+
+                    <!-- Vertical Splitter -->
+                    <GridSplitter Grid.Column="1" Width="4"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Stretch"
+                                  Background="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}"
+                                  ResizeDirection="Columns" />
+
+                    <!-- Diff Files DataGrid -->
+                    <DataGrid Grid.Column="2"
+                              ItemsSource="{Binding DiffFiles}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              CanUserSortColumns="True"
+                              CanUserResizeColumns="True"
+                              HeadersVisibility="Column"
+                              GridLinesVisibility="Horizontal"
+                              BorderThickness="1"
+                              BorderBrush="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}"
+                              FontSize="12">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="Status" Width="70" SortMemberPath="StatusText">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding StatusText}"
+                                                   Foreground="{Binding Status, Converter={StaticResource StatusToColorConverter}}"
+                                                   FontWeight="Bold" FontSize="11" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="File Path" Binding="{Binding FilePath}" Width="*" />
+                            <DataGridTextColumn Header="Old Path" Binding="{Binding OldPath}" Width="180" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
             </DockPanel>
         </Grid>
     </DockPanel>
