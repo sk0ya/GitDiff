@@ -33,6 +33,8 @@ public partial class MainViewModel : ObservableObject
         _c0CaseService = c0CaseService;
     }
 
+    public IGitService GitService => _gitService;
+
     [ObservableProperty]
     private string _repositoryPath = string.Empty;
 

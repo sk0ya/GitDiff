@@ -331,6 +331,7 @@
 
                     <!-- Diff Files DataGrid -->
                     <DataGrid Grid.Column="2"
+                              x:Name="DiffFilesGrid"
                               ItemsSource="{Binding DiffFiles}"
                               AutoGenerateColumns="False"
                               IsReadOnly="True"
@@ -340,7 +341,8 @@
                               GridLinesVisibility="Horizontal"
                               BorderThickness="1"
                               BorderBrush="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}"
-                              FontSize="12">
+                              FontSize="12"
+                              MouseDoubleClick="DiffFilesGrid_MouseDoubleClick">
                         <DataGrid.Columns>
                             <DataGridTemplateColumn Header="Status" Width="70" SortMemberPath="StatusText">
                                 <DataGridTemplateColumn.CellTemplate>

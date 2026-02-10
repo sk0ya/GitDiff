@@ -12,4 +12,6 @@ public interface IGitService
     IReadOnlyList<string> GetCommittersBetween(string repoPath, string baseCommitHash, string targetCommitHash);
     byte[]? GetFileContent(string repoPath, string commitHash, string filePath);
     IReadOnlyList<int> GetChangedLineNumbers(string repoPath, string baseCommitHash, string targetCommitHash, string filePath);
+    IReadOnlyList<FileCommitInfo> GetFileCommitsBetween(string repoPath, string baseCommitHash, string targetCommitHash, string filePath);
+    FileDiffResult GetFileDiff(string repoPath, string oldCommitHash, string newCommitHash, string filePath);
 }

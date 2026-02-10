@@ -259,6 +259,152 @@ public class GitService : IGitService
         return changedLines;
     }
 
+    public IReadOnlyList<FileCommitInfo> GetFileCommitsBetween(string repoPath, string baseCommitHash, string targetCommitHash, string filePath)
+    {
+        using var repo = new Repository(repoPath);
+        var baseCommit = repo.Lookup<Commit>(baseCommitHash);
+        var targetCommit = repo.Lookup<Commit>(targetCommitHash);
+
+        if (baseCommit == null || targetCommit == null)
+            return [];
+
+        var filter = new CommitFilter
+        {
+            IncludeReachableFrom = targetCommit,
+            ExcludeReachableFrom = baseCommit,
+            SortBy = CommitSortStrategies.Topological | CommitSortStrategies.Reverse
+        };
+
+        var result = new List<FileCommitInfo>();
+
+        foreach (var commit in repo.Commits.QueryBy(filter))
+        {
+            var parents = commit.Parents.ToList();
+            TreeChanges changes;
+
+            if (parents.Count == 0)
+            {
+                changes = repo.Diff.Compare<TreeChanges>(null, commit.Tree);
+            }
+            else
+            {
+                changes = repo.Diff.Compare<TreeChanges>(parents[0].Tree, commit.Tree);
+            }
+
+            if (changes.Any(c => string.Equals(c.Path, filePath, StringComparison.OrdinalIgnoreCase)
+                              || string.Equals(c.OldPath, filePath, StringComparison.OrdinalIgnoreCase)))
+            {
+                result.Add(new FileCommitInfo
+                {
+                    Hash = commit.Sha,
+                    Message = commit.MessageShort,
+                    Author = commit.Author.Name,
+                    Date = commit.Author.When,
+                    ParentHash = parents.Count > 0 ? parents[0].Sha : string.Empty
+                });
+            }
+        }
+
+        return result;
+    }
+
+    public FileDiffResult GetFileDiff(string repoPath, string oldCommitHash, string newCommitHash, string filePath)
+    {
+        using var repo = new Repository(repoPath);
+        var oldCommit = repo.Lookup<Commit>(oldCommitHash);
+        var newCommit = repo.Lookup<Commit>(newCommitHash);
+
+        if (oldCommit == null || newCommit == null)
+            return new FileDiffResult();
+
+        var patch = repo.Diff.Compare<Patch>(oldCommit.Tree, newCommit.Tree);
+
+        // Iterate instead of indexer for robust case-insensitive matching
+        PatchEntryChanges? patchEntry = null;
+        foreach (var entry in patch)
+        {
+            if (string.Equals(entry.Path, filePath, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(entry.OldPath, filePath, StringComparison.OrdinalIgnoreCase))
+            {
+                patchEntry = entry;
+                break;
+            }
+        }
+
+        if (patchEntry == null || string.IsNullOrEmpty(patchEntry.Patch))
+            return new FileDiffResult();
+
+        var patchText = patchEntry.Patch;
+        var lines = ParseDiffLines(patchText);
+
+        return new FileDiffResult
+        {
+            RawPatch = patchText,
+            Lines = lines
+        };
+    }
+
+    private static IReadOnlyList<DiffLine> ParseDiffLines(string patchText)
+    {
+        var result = new List<DiffLine>();
+        var hunkHeaderRegex = new Regex(@"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)");
+        var oldLine = 0;
+        var newLine = 0;
+
+        foreach (var line in patchText.Split('\n'))
+        {
+            var match = hunkHeaderRegex.Match(line);
+            if (match.Success)
+            {
+                oldLine = int.Parse(match.Groups[1].Value);
+                newLine = int.Parse(match.Groups[2].Value);
+                result.Add(new DiffLine
+                {
+                    Type = DiffLineType.Hunk,
+                    Content = line
+                });
+                continue;
+            }
+
+            if (oldLine == 0 && newLine == 0) continue;
+
+            if (line.StartsWith('+'))
+            {
+                result.Add(new DiffLine
+                {
+                    Type = DiffLineType.Added,
+                    NewLineNumber = newLine,
+                    Content = line.Length > 1 ? line[1..] : string.Empty
+                });
+                newLine++;
+            }
+            else if (line.StartsWith('-'))
+            {
+                result.Add(new DiffLine
+                {
+                    Type = DiffLineType.Deleted,
+                    OldLineNumber = oldLine,
+                    Content = line.Length > 1 ? line[1..] : string.Empty
+                });
+                oldLine++;
+            }
+            else if (line.StartsWith(' ') || (line.Length == 0 && oldLine > 0))
+            {
+                result.Add(new DiffLine
+                {
+                    Type = DiffLineType.Context,
+                    OldLineNumber = oldLine,
+                    NewLineNumber = newLine,
+                    Content = line.Length > 1 ? line[1..] : string.Empty
+                });
+                oldLine++;
+                newLine++;
+            }
+        }
+
+        return result;
+    }
+
     private static ChangeStatus MapStatus(ChangeKind kind) => kind switch
     {
         ChangeKind.Added => ChangeStatus.Added,
