@@ -43,20 +43,55 @@
                         Style="{StaticResource MaterialDesignFlatButton}"
                         Padding="8,4" Height="28" />
                 <Separator />
-                <materialDesign:PackIcon Kind="AccountFilter" VerticalAlignment="Center" Width="18" Height="18" />
-                <ComboBox ItemsSource="{Binding Committers}"
-                          SelectedItem="{Binding SelectedCommitter}"
-                          materialDesign:HintAssist.Hint="Committer"
-                          IsEditable="False"
-                          Width="150"
-                          VerticalAlignment="Center"
-                          Margin="4,0">
-                    <ComboBox.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="クリア" Click="ClearCommitterFilter_Click" />
-                        </ContextMenu>
-                    </ComboBox.ContextMenu>
-                </ComboBox>
+                <materialDesign:PopupBox StaysOpen="True"
+                                         PlacementMode="BottomAndAlignLeftEdges"
+                                         ToolTip="Committerフィルター"
+                                         materialDesign:ElevationAssist.Elevation="Dp0">
+                    <materialDesign:PopupBox.ToggleContent>
+                        <Border BorderBrush="{DynamicResource MaterialDesign.Brush.ForegroundLight}"
+                                BorderThickness="1" CornerRadius="3" Padding="8,4">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="AccountFilter" Width="16" Height="16"
+                                                         VerticalAlignment="Center" Margin="0,0,4,0"
+                                                         Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
+                                <TextBlock Text="{Binding CommitterFilterLabel}"
+                                           VerticalAlignment="Center" FontSize="12"
+                                           Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
+                                <materialDesign:PackIcon Kind="ChevronDown" Width="14" Height="14"
+                                                         VerticalAlignment="Center" Margin="4,0,0,0"
+                                                         Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
+                            </StackPanel>
+                        </Border>
+                    </materialDesign:PopupBox.ToggleContent>
+                    <StackPanel MinWidth="220" Margin="8">
+                        <TextBox Text="{Binding CommitterFilterText, UpdateSourceTrigger=PropertyChanged}"
+                                 materialDesign:HintAssist.Hint="フィルタ..."
+                                 materialDesign:TextFieldAssist.HasClearButton="True"
+                                 Margin="0,0,0,4" FontSize="12" />
+                        <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding FilteredCommitters}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Content="{Binding Name}"
+                                                  IsChecked="{Binding IsSelected}"
+                                                  Margin="0,2" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                        <Separator Margin="0,6" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="すべて選択"
+                                    Command="{Binding SelectAllCommittersCommand}"
+                                    Style="{StaticResource MaterialDesignFlatButton}"
+                                    Padding="8,2" Height="26" FontSize="11" />
+                            <Button Content="クリア"
+                                    Command="{Binding ClearAllCommittersCommand}"
+                                    Style="{StaticResource MaterialDesignFlatButton}"
+                                    Padding="8,2" Height="26" FontSize="11" />
+                        </StackPanel>
+                    </StackPanel>
+                </materialDesign:PopupBox>
             </ToolBar>
         </ToolBarTray>
 

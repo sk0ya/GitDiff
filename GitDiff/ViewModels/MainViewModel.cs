@@ -42,10 +42,16 @@ public partial class MainViewModel : ObservableObject
     private ObservableCollection<CommitInfo> _commits = [];
 
     [ObservableProperty]
-    private ObservableCollection<string> _committers = [];
+    private ObservableCollection<SelectableCommitter> _filterCommitters = [];
 
     [ObservableProperty]
-    private string? _selectedCommitter;
+    private ObservableCollection<SelectableCommitter> _filteredCommitters = [];
+
+    [ObservableProperty]
+    private string _committerFilterText = string.Empty;
+
+    [ObservableProperty]
+    private string _committerFilterLabel = "Committer(All)";
 
     [ObservableProperty]
     private CommitInfo? _baseCommit;
@@ -80,7 +86,7 @@ public partial class MainViewModel : ObservableObject
     public bool HasBaseCommit => BaseCommit != null;
     public bool HasTargetCommit => TargetCommit != null;
 
-    partial void OnSelectedCommitterChanged(string? value) => ApplyFilters();
+    partial void OnCommitterFilterTextChanged(string value) => UpdateFilteredCommitters();
 
     partial void OnBaseCommitChanged(CommitInfo? value)
     {
@@ -138,8 +144,7 @@ public partial class MainViewModel : ObservableObject
 
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    Committers = new ObservableCollection<string>(committers);
-                    SelectedCommitter = null;
+                    InitFilterCommitters(committers);
                     BaseCommit = null;
                     TargetCommit = null;
                     _allDiffFiles = [];
@@ -547,13 +552,68 @@ public partial class MainViewModel : ObservableObject
             c.IsSelected = false;
     }
 
+    private void InitFilterCommitters(IReadOnlyList<string> committers)
+    {
+        var items = committers.Select(name => new SelectableCommitter { Name = name }).ToList();
+        foreach (var item in items)
+        {
+            item.PropertyChanged += (_, _) =>
+            {
+                UpdateCommitterFilterLabel();
+                ApplyFilters();
+            };
+        }
+        FilterCommitters = new ObservableCollection<SelectableCommitter>(items);
+        CommitterFilterText = string.Empty;
+        UpdateFilteredCommitters();
+        UpdateCommitterFilterLabel();
+    }
+
+    private void UpdateFilteredCommitters()
+    {
+        var text = CommitterFilterText ?? string.Empty;
+        var items = string.IsNullOrWhiteSpace(text)
+            ? FilterCommitters
+            : new ObservableCollection<SelectableCommitter>(
+                FilterCommitters.Where(c => c.Name.Contains(text, StringComparison.OrdinalIgnoreCase)));
+        FilteredCommitters = items;
+    }
+
+    private void UpdateCommitterFilterLabel()
+    {
+        var total = FilterCommitters.Count;
+        var selected = FilterCommitters.Count(c => c.IsSelected);
+
+        CommitterFilterLabel = selected == 0 || selected == total
+            ? "Committer(All)"
+            : $"Committer({selected}/{total})";
+    }
+
+    [RelayCommand]
+    private void SelectAllCommitters()
+    {
+        foreach (var c in FilterCommitters)
+            c.IsSelected = true;
+    }
+
+    [RelayCommand]
+    private void ClearAllCommitters()
+    {
+        foreach (var c in FilterCommitters)
+            c.IsSelected = false;
+    }
+
     private void ApplyFilters()
     {
         var filtered = _allCommits.AsEnumerable();
 
-        if (!string.IsNullOrEmpty(SelectedCommitter))
+        var total = FilterCommitters.Count;
+        var selected = FilterCommitters.Count(c => c.IsSelected);
+        if (selected > 0 && selected < total)
         {
-            filtered = filtered.Where(c => c.Author == SelectedCommitter);
+            var selectedNames = new HashSet<string>(
+                FilterCommitters.Where(c => c.IsSelected).Select(c => c.Name));
+            filtered = filtered.Where(c => selectedNames.Contains(c.Author));
         }
 
         Commits = new ObservableCollection<CommitInfo>(filtered);

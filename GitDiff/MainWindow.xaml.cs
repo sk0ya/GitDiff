@@ -17,14 +17,6 @@ public partial class MainWindow : Window
         InitializeComponent();
     }
 
-    private void ClearCommitterFilter_Click(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is MainViewModel vm)
-        {
-            vm.SelectedCommitter = null;
-        }
-    }
-
     private void CommitsGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         // Find the clicked DataGridRow
