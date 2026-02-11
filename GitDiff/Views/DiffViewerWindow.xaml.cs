@@ -1,7 +1,10 @@
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
+using GitDiff.Models;
 using GitDiff.ViewModels;
 
 namespace GitDiff.Views;
@@ -16,6 +19,19 @@ public partial class DiffViewerWindow : Window
     {
         DataContext = viewModel;
         InitializeComponent();
+
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(DiffViewerViewModel.DiffLines):
+                case nameof(DiffViewerViewModel.SideBySideLines):
+                case nameof(DiffViewerViewModel.IsSideBySideMode):
+                    Dispatcher.BeginInvoke(DispatcherPriority.Loaded, ScrollToFirstChange);
+                    break;
+            }
+        };
+
         Loaded += async (_, _) =>
         {
             InitializeScrollSync();
@@ -62,6 +78,43 @@ public partial class DiffViewerWindow : Window
                 _rightScrollViewer.VerticalOffset - e.Delta);
             e.Handled = true;
         }
+    }
+
+    private void ScrollToFirstChange()
+    {
+        if (DataContext is not DiffViewerViewModel vm) return;
+
+        if (vm.IsSideBySideMode)
+        {
+            var firstChange = vm.SideBySideLines.FirstOrDefault(l =>
+                l.LeftType is DiffLineType.Added or DiffLineType.Deleted ||
+                l.RightType is DiffLineType.Added or DiffLineType.Deleted);
+            if (firstChange != null)
+                ScrollToCenter(RightDiffList, firstChange);
+        }
+        else
+        {
+            var firstChange = vm.DiffLines.FirstOrDefault(l =>
+                l.Type is DiffLineType.Added or DiffLineType.Deleted);
+            if (firstChange != null)
+                ScrollToCenter(UnifiedDiffList, firstChange);
+        }
+    }
+
+    private void ScrollToCenter(ListView listView, object item)
+    {
+        // まずScrollIntoViewでコンテナを実体化させる（仮想化対策）
+        listView.ScrollIntoView(item);
+        listView.UpdateLayout();
+
+        var container = listView.ItemContainerGenerator.ContainerFromItem(item) as FrameworkElement;
+        var scrollViewer = GetScrollViewer(listView);
+        if (container == null || scrollViewer == null) return;
+
+        var itemTop = container.TranslatePoint(new Point(0, 0), scrollViewer).Y;
+        var centerOffset = scrollViewer.VerticalOffset + itemTop
+                           - (scrollViewer.ViewportHeight - container.ActualHeight) / 2;
+        scrollViewer.ScrollToVerticalOffset(Math.Max(0, centerOffset));
     }
 
     private static ScrollViewer? GetScrollViewer(DependencyObject element)

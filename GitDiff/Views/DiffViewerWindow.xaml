@@ -138,7 +138,7 @@
             </Border>
 
             <!-- Unified Diff Content -->
-            <ListView ItemsSource="{Binding DiffLines}"
+            <ListView x:Name="UnifiedDiffList" ItemsSource="{Binding DiffLines}"
                       Visibility="{Binding IsSideBySideMode, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"
                       VirtualizingStackPanel.IsVirtualizing="True"
                       VirtualizingStackPanel.VirtualizationMode="Recycling"
