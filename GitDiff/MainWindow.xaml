@@ -189,7 +189,13 @@
                           RowHeight="28"
                           FontSize="12">
                     <DataGrid.Columns>
-                        <DataGridTemplateColumn Header="" Width="48" CanUserSort="False" CanUserResize="False">
+                        <DataGridTemplateColumn Header="" Width="56" CanUserSort="False" CanUserResize="False">
+                            <DataGridTemplateColumn.CellStyle>
+                                <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="Margin" Value="0" />
+                                </Style>
+                            </DataGridTemplateColumn.CellStyle>
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBlock FontWeight="Bold" FontSize="10" HorizontalAlignment="Center"
@@ -199,6 +205,7 @@
                                                 <Binding />
                                                 <Binding Path="DataContext.BaseCommit" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
                                                 <Binding Path="DataContext.TargetCommit" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                                                <Binding Path="DataContext.Commits" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
                                             </MultiBinding>
                                         </TextBlock.Text>
                                         <TextBlock.Style>
@@ -209,6 +216,10 @@
                                                     </Trigger>
                                                     <Trigger Property="Text" Value="Target">
                                                         <Setter Property="Foreground" Value="{DynamicResource SecondaryHueMidBrush}" />
+                                                    </Trigger>
+                                                    <Trigger Property="Text" Value="│">
+                                                        <Setter Property="Foreground" Value="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
+                                                        <Setter Property="FontSize" Value="14" />
                                                     </Trigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -257,72 +268,9 @@
                 </DockPanel>
 
                 <!-- Base/Target + Compare bar -->
-                <DockPanel DockPanel.Dock="Top" Margin="4,4,4,2">
-                    <Button DockPanel.Dock="Right"
-                            Command="{Binding CompareCommand}"
-                            Style="{StaticResource MaterialDesignRaisedSecondaryButton}"
-                            materialDesign:ButtonAssist.CornerRadius="3"
-                            Padding="12,4" Height="30" Margin="8,0,0,0">
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="Compare" Width="16" Height="16" Margin="0,0,4,0" />
-                            <TextBlock Text="Compare" />
-                        </StackPanel>
-                    </Button>
-                    <CheckBox DockPanel.Dock="Right"
-                              IsChecked="{Binding ExcludeMergeCommits}"
-                              Content="Mergeコミットを除外"
-                              VerticalAlignment="Center"
-                              Margin="8,0,0,0"
-                              FontSize="12"
-                              ToolTip="マージコミットを差分検出から除外します" />
-                    <materialDesign:PopupBox DockPanel.Dock="Right"
-                                             PlacementMode="BottomAndAlignRightEdges"
-                                             StaysOpen="True"
-                                             Margin="8,0,0,0"
-                                             Height="30"
-                                             ToolTip="Compare時のCommitterフィルター"
-                                             materialDesign:ElevationAssist.Elevation="Dp0">
-                        <materialDesign:PopupBox.ToggleContent>
-                            <Border BorderBrush="{DynamicResource MaterialDesign.Brush.ForegroundLight}"
-                                    BorderThickness="1" CornerRadius="3" Padding="8,4">
-                                <StackPanel Orientation="Horizontal">
-                                    <materialDesign:PackIcon Kind="AccountFilter" Width="16" Height="16"
-                                                             VerticalAlignment="Center" Margin="0,0,4,0"
-                                                             Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
-                                    <TextBlock Text="{Binding CompareCommitterLabel}"
-                                               VerticalAlignment="Center" FontSize="12"
-                                               Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
-                                    <materialDesign:PackIcon Kind="ChevronDown" Width="14" Height="14"
-                                                             VerticalAlignment="Center" Margin="4,0,0,0"
-                                                             Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
-                                </StackPanel>
-                            </Border>
-                        </materialDesign:PopupBox.ToggleContent>
-                        <StackPanel MinWidth="200" Margin="8">
-                            <ItemsControl ItemsSource="{Binding CompareCommitters}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <CheckBox Content="{Binding Name}"
-                                                  IsChecked="{Binding IsSelected}"
-                                                  Margin="0,2" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <Separator Margin="0,6" />
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button Content="すべて選択"
-                                        Command="{Binding SelectAllCompareCommittersCommand}"
-                                        Style="{StaticResource MaterialDesignFlatButton}"
-                                        Padding="8,2" Height="26" FontSize="11" />
-                                <Button Content="クリア"
-                                        Command="{Binding ClearAllCompareCommittersCommand}"
-                                        Style="{StaticResource MaterialDesignFlatButton}"
-                                        Padding="8,2" Height="26" FontSize="11" />
-                            </StackPanel>
-                        </StackPanel>
-                    </materialDesign:PopupBox>
-
-                    <Grid VerticalAlignment="Center">
+                <StackPanel DockPanel.Dock="Top" Margin="4,4,4,2">
+                    <!-- Row 1: Base/Target display (full width) -->
+                    <Grid VerticalAlignment="Center" Margin="0,0,0,4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
@@ -344,7 +292,74 @@
                                    TextTrimming="CharacterEllipsis"
                                    ToolTip="{Binding TargetCommit.DisplayText}" />
                     </Grid>
-                </DockPanel>
+                    <!-- Row 2: Controls -->
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right"
+                                Command="{Binding CompareCommand}"
+                                Style="{StaticResource MaterialDesignRaisedSecondaryButton}"
+                                materialDesign:ButtonAssist.CornerRadius="3"
+                                Padding="12,4" Height="30" Margin="8,0,0,0">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="Compare" Width="16" Height="16" Margin="0,0,4,0" />
+                                <TextBlock Text="Compare" />
+                            </StackPanel>
+                        </Button>
+                        <CheckBox DockPanel.Dock="Right"
+                                  IsChecked="{Binding ExcludeMergeCommits}"
+                                  Content="Mergeコミットを除外"
+                                  VerticalAlignment="Center"
+                                  Margin="8,0,0,0"
+                                  FontSize="12"
+                                  ToolTip="マージコミットを差分検出から除外します" />
+                        <materialDesign:PopupBox DockPanel.Dock="Right"
+                                                 PlacementMode="BottomAndAlignRightEdges"
+                                                 StaysOpen="True"
+                                                 Margin="8,0,0,0"
+                                                 Height="30"
+                                                 ToolTip="Compare時のCommitterフィルター"
+                                                 materialDesign:ElevationAssist.Elevation="Dp0">
+                            <materialDesign:PopupBox.ToggleContent>
+                                <Border BorderBrush="{DynamicResource MaterialDesign.Brush.ForegroundLight}"
+                                        BorderThickness="1" CornerRadius="3" Padding="8,4">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="AccountFilter" Width="16" Height="16"
+                                                                 VerticalAlignment="Center" Margin="0,0,4,0"
+                                                                 Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
+                                        <TextBlock Text="{Binding CompareCommitterLabel}"
+                                                   VerticalAlignment="Center" FontSize="12"
+                                                   Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
+                                        <materialDesign:PackIcon Kind="ChevronDown" Width="14" Height="14"
+                                                                 VerticalAlignment="Center" Margin="4,0,0,0"
+                                                                 Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
+                                    </StackPanel>
+                                </Border>
+                            </materialDesign:PopupBox.ToggleContent>
+                            <StackPanel MinWidth="200" Margin="8">
+                                <ItemsControl ItemsSource="{Binding CompareCommitters}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox Content="{Binding Name}"
+                                                      IsChecked="{Binding IsSelected}"
+                                                      Margin="0,2" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Separator Margin="0,6" />
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button Content="すべて選択"
+                                            Command="{Binding SelectAllCompareCommittersCommand}"
+                                            Style="{StaticResource MaterialDesignFlatButton}"
+                                            Padding="8,2" Height="26" FontSize="11" />
+                                    <Button Content="クリア"
+                                            Command="{Binding ClearAllCompareCommittersCommand}"
+                                            Style="{StaticResource MaterialDesignFlatButton}"
+                                            Padding="8,2" Height="26" FontSize="11" />
+                                </StackPanel>
+                            </StackPanel>
+                        </materialDesign:PopupBox>
+                        <TextBlock />
+                    </DockPanel>
+                </StackPanel>
 
                 <!-- Diff Files -->
                 <DockPanel>
