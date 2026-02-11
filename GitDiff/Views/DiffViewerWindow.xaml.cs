@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -14,6 +15,10 @@ public partial class DiffViewerWindow : Window
     private ScrollViewer? _leftScrollViewer;
     private ScrollViewer? _rightScrollViewer;
     private bool _isSyncingScroll;
+
+    // Drag selection state
+    private ListView? _dragListView;
+    private int _dragStartIndex = -1;
 
     public DiffViewerWindow(DiffViewerViewModel viewModel)
     {
@@ -37,6 +42,19 @@ public partial class DiffViewerWindow : Window
             InitializeScrollSync();
             await viewModel.LoadCommand.ExecuteAsync(null);
         };
+
+        // Ctrl+C support for all diff ListViews
+        UnifiedDiffList.KeyDown += OnDiffListKeyDown;
+        LeftDiffList.KeyDown += OnDiffListKeyDown;
+        RightDiffList.KeyDown += OnDiffListKeyDown;
+
+        // Drag selection for all diff ListViews
+        foreach (var lv in new[] { UnifiedDiffList, LeftDiffList, RightDiffList })
+        {
+            lv.PreviewMouseLeftButtonDown += OnDiffListPreviewMouseDown;
+            lv.PreviewMouseMove += OnDiffListPreviewMouseMove;
+            lv.PreviewMouseLeftButtonUp += OnDiffListPreviewMouseUp;
+        }
     }
 
     private void InitializeScrollSync()
@@ -131,5 +149,113 @@ public partial class DiffViewerWindow : Window
         }
 
         return null;
+    }
+
+    private void OnDiffListPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        var listView = (ListView)sender;
+        var index = GetItemIndexAtPoint(listView, e.GetPosition(listView));
+        if (index < 0) return;
+
+        _dragListView = listView;
+        _dragStartIndex = index;
+
+        listView.SelectedItems.Clear();
+        listView.SelectedIndex = index;
+
+        listView.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnDiffListPreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        var listView = (ListView)sender;
+        if (_dragListView != listView || _dragStartIndex < 0) return;
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+
+        var index = GetItemIndexAtPoint(listView, e.GetPosition(listView));
+        if (index < 0) return;
+
+        var start = Math.Min(_dragStartIndex, index);
+        var end = Math.Max(_dragStartIndex, index);
+
+        listView.SelectedItems.Clear();
+        for (int i = start; i <= end; i++)
+            listView.SelectedItems.Add(listView.Items[i]);
+    }
+
+    private void OnDiffListPreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        var listView = (ListView)sender;
+        if (_dragListView == listView)
+        {
+            listView.ReleaseMouseCapture();
+            _dragListView = null;
+            _dragStartIndex = -1;
+        }
+    }
+
+    private int GetItemIndexAtPoint(ListView listView, Point point)
+    {
+        var hit = VisualTreeHelper.HitTest(listView, point);
+        if (hit?.VisualHit == null) return -1;
+
+        // Walk up the visual tree to find the ListViewItem
+        DependencyObject? current = hit.VisualHit;
+        while (current != null && current != listView)
+        {
+            if (current is ListViewItem item)
+                return listView.ItemContainerGenerator.IndexFromContainer(item);
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return -1;
+    }
+
+    private void OnDiffListKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            CopySelectedLines((ListView)sender);
+            e.Handled = true;
+        }
+    }
+
+    private void CopyMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        // ContextMenu.PlacementTarget is the ListView that owns the context menu
+        if (sender is MenuItem menuItem &&
+            menuItem.Parent is ContextMenu contextMenu &&
+            contextMenu.PlacementTarget is ListView listView)
+        {
+            CopySelectedLines(listView);
+        }
+    }
+
+    private void CopySelectedLines(ListView listView)
+    {
+        if (listView.SelectedItems.Count == 0) return;
+
+        var sb = new StringBuilder();
+
+        if (listView == UnifiedDiffList)
+        {
+            foreach (DiffLine line in listView.SelectedItems)
+                sb.AppendLine(line.Content);
+        }
+        else if (listView == LeftDiffList)
+        {
+            foreach (SideBySideLine line in listView.SelectedItems)
+                sb.AppendLine(line.LeftContent ?? "");
+        }
+        else if (listView == RightDiffList)
+        {
+            foreach (SideBySideLine line in listView.SelectedItems)
+                sb.AppendLine(line.RightContent ?? "");
+        }
+
+        var text = sb.ToString().TrimEnd('\r', '\n');
+        if (!string.IsNullOrEmpty(text))
+            Clipboard.SetText(text);
     }
 }

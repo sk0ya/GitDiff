@@ -146,7 +146,13 @@
                       ScrollViewer.VerticalScrollBarVisibility="Auto"
                       BorderThickness="0"
                       FontFamily="Consolas" FontSize="12"
+                      SelectionMode="Extended"
                       HorizontalContentAlignment="Stretch">
+                <ListView.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="コピー (_C)" InputGestureText="Ctrl+C" Click="CopyMenuItem_Click" />
+                    </ContextMenu>
+                </ListView.ContextMenu>
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="Padding" Value="0" />
@@ -156,11 +162,19 @@
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ListViewItem">
-                                    <Border Background="{Binding Type, Converter={StaticResource DiffLineTypeToBackgroundConverter}}"
-                                            BorderThickness="0,0,0,0.5"
-                                            BorderBrush="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}">
-                                        <ContentPresenter />
-                                    </Border>
+                                    <Grid>
+                                        <Border Background="{Binding Type, Converter={StaticResource DiffLineTypeToBackgroundConverter}}"
+                                                BorderThickness="0,0,0,0.5"
+                                                BorderBrush="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}">
+                                            <ContentPresenter />
+                                        </Border>
+                                        <Border x:Name="SelectionOverlay" Background="Transparent" IsHitTestVisible="False" />
+                                    </Grid>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="SelectionOverlay" Property="Background" Value="#4000BFFF" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
                                 </ControlTemplate>
                             </Setter.Value>
                         </Setter>
@@ -229,7 +243,13 @@
                           ScrollViewer.VerticalScrollBarVisibility="Hidden"
                           BorderThickness="0"
                           FontFamily="Consolas" FontSize="12"
+                          SelectionMode="Extended"
                           HorizontalContentAlignment="Stretch">
+                    <ListView.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="コピー (_C)" InputGestureText="Ctrl+C" Click="CopyMenuItem_Click" />
+                        </ContextMenu>
+                    </ListView.ContextMenu>
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
                             <Setter Property="Padding" Value="0" />
@@ -239,11 +259,19 @@
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListViewItem">
-                                        <Border Background="{Binding LeftType, Converter={StaticResource DiffLineTypeToBackgroundConverter}}"
-                                                BorderThickness="0,0,0,0.5"
-                                                BorderBrush="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}">
-                                            <ContentPresenter />
-                                        </Border>
+                                        <Grid>
+                                            <Border Background="{Binding LeftType, Converter={StaticResource DiffLineTypeToBackgroundConverter}}"
+                                                    BorderThickness="0,0,0,0.5"
+                                                    BorderBrush="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}">
+                                                <ContentPresenter />
+                                            </Border>
+                                            <Border x:Name="SelectionOverlay" Background="Transparent" IsHitTestVisible="False" />
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="SelectionOverlay" Property="Background" Value="#4000BFFF" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </Setter.Value>
                             </Setter>
@@ -282,7 +310,13 @@
                           ScrollViewer.VerticalScrollBarVisibility="Auto"
                           BorderThickness="0"
                           FontFamily="Consolas" FontSize="12"
+                          SelectionMode="Extended"
                           HorizontalContentAlignment="Stretch">
+                    <ListView.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="コピー (_C)" InputGestureText="Ctrl+C" Click="CopyMenuItem_Click" />
+                        </ContextMenu>
+                    </ListView.ContextMenu>
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
                             <Setter Property="Padding" Value="0" />
@@ -292,11 +326,19 @@
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListViewItem">
-                                        <Border Background="{Binding RightType, Converter={StaticResource DiffLineTypeToBackgroundConverter}}"
-                                                BorderThickness="0,0,0,0.5"
-                                                BorderBrush="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}">
-                                            <ContentPresenter />
-                                        </Border>
+                                        <Grid>
+                                            <Border Background="{Binding RightType, Converter={StaticResource DiffLineTypeToBackgroundConverter}}"
+                                                    BorderThickness="0,0,0,0.5"
+                                                    BorderBrush="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}">
+                                                <ContentPresenter />
+                                            </Border>
+                                            <Border x:Name="SelectionOverlay" Background="Transparent" IsHitTestVisible="False" />
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="SelectionOverlay" Property="Background" Value="#4000BFFF" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </Setter.Value>
                             </Setter>
