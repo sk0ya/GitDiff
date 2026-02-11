@@ -188,6 +188,12 @@
                           BorderBrush="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}"
                           RowHeight="28"
                           FontSize="12">
+                    <DataGrid.CellStyle>
+                        <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0" />
+                        </Style>
+                    </DataGrid.CellStyle>
                     <DataGrid.Columns>
                         <DataGridTemplateColumn Header="" Width="56" CanUserSort="False" CanUserResize="False">
                             <DataGridTemplateColumn.CellStyle>
@@ -228,9 +234,21 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Hash" Binding="{Binding ShortHash}" Width="70" />
+                        <DataGridTextColumn Header="Hash" Binding="{Binding ShortHash}" Width="70">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="#2196F3" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
                         <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*" />
-                        <DataGridTextColumn Header="Author" Binding="{Binding Author}" Width="110" />
+                        <DataGridTextColumn Header="Author" Binding="{Binding Author}" Width="110">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="#4CAF50" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
                         <DataGridTextColumn Header="Date" Binding="{Binding DateString}" Width="120" />
                     </DataGrid.Columns>
                 </DataGrid>
