@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Text;
 using System.Windows;
+using System.Windows.Shell;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GitDiff.Models;
@@ -15,6 +16,7 @@ public partial class MainViewModel : ObservableObject
     private readonly IGitService _gitService;
     private readonly IFileExportService _fileExportService;
     private readonly IC0CaseService _c0CaseService;
+    private readonly ISettingsService _settingsService;
 
     private List<CommitInfo> _allCommits = [];
     private List<DiffFileInfo> _allDiffFiles = [];
@@ -22,15 +24,17 @@ public partial class MainViewModel : ObservableObject
     private bool _suppressFolderFilter;
 
     public MainViewModel()
-        : this(new GitService(), new FileExportService(new GitService()), new C0CaseService())
+        : this(new GitService(), new FileExportService(new GitService()), new C0CaseService(), new SettingsService())
     {
     }
 
-    public MainViewModel(IGitService gitService, IFileExportService fileExportService, IC0CaseService c0CaseService)
+    public MainViewModel(IGitService gitService, IFileExportService fileExportService,
+        IC0CaseService c0CaseService, ISettingsService settingsService)
     {
         _gitService = gitService;
         _fileExportService = fileExportService;
         _c0CaseService = c0CaseService;
+        _settingsService = settingsService;
     }
 
     public IGitService GitService => _gitService;
@@ -177,6 +181,8 @@ public partial class MainViewModel : ObservableObject
                 });
             });
 
+            _settingsService.AddRecentRepository(RepositoryPath);
+            UpdateJumpList();
             StatusMessage = $"リポジトリを読み込みました。コミット数: {_allCommits.Count}";
         }
         catch (Exception ex)
@@ -649,6 +655,51 @@ public partial class MainViewModel : ObservableObject
     {
         foreach (var c in FilterCommitters)
             c.IsSelected = false;
+    }
+
+    public async Task InitializeAsync(string? repositoryPath)
+    {
+        if (!string.IsNullOrWhiteSpace(repositoryPath))
+        {
+            RepositoryPath = repositoryPath;
+            await LoadRepository();
+            return;
+        }
+
+        var settings = _settingsService.Load();
+        if (!string.IsNullOrWhiteSpace(settings.LastRepositoryPath))
+        {
+            RepositoryPath = settings.LastRepositoryPath;
+            await LoadRepository();
+        }
+
+        UpdateJumpList();
+    }
+
+    private void UpdateJumpList()
+    {
+        try
+        {
+            var settings = _settingsService.Load();
+            var jumpList = new JumpList();
+
+            foreach (var repoPath in settings.RecentRepositories)
+            {
+                jumpList.JumpItems.Add(new JumpTask
+                {
+                    Title = repoPath,
+                    Arguments = $"\"{repoPath}\"",
+                    Description = $"Open repository: {repoPath}",
+                    ApplicationPath = Environment.ProcessPath,
+                });
+            }
+
+            jumpList.Apply();
+        }
+        catch
+        {
+            // JumpList update is non-critical
+        }
     }
 
     private void ApplyFilters()
