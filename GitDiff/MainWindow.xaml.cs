@@ -72,6 +72,23 @@ public partial class MainWindow : Window
         window.Show();
     }
 
+    private void BaseCommitText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (DataContext is MainViewModel { BaseCommit: { } commit })
+            ScrollCommitIntoView(commit);
+    }
+
+    private void TargetCommitText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (DataContext is MainViewModel { TargetCommit: { } commit })
+            ScrollCommitIntoView(commit);
+    }
+
+    private void ScrollCommitIntoView(CommitInfo commit)
+    {
+        CommitsGrid.ScrollIntoView(commit);
+    }
+
     private void UpdateBaseTarget()
     {
         if (DataContext is not MainViewModel vm) return;

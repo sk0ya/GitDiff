@@ -283,14 +283,18 @@
                                    VerticalAlignment="Center"
                                    Foreground="{DynamicResource PrimaryHueMidBrush}"
                                    TextTrimming="CharacterEllipsis"
-                                   ToolTip="{Binding BaseCommit.DisplayText}" />
+                                   ToolTip="{Binding BaseCommit.DisplayText}"
+                                   MouseLeftButtonDown="BaseCommitText_MouseLeftButtonDown"
+                                   Cursor="Hand" />
                         <materialDesign:PackIcon Grid.Column="2" Kind="ArrowRight" VerticalAlignment="Center" Margin="8,0" Width="18" Height="18" />
                         <TextBlock Grid.Column="3" Text="Target:" VerticalAlignment="Center" Margin="0,0,4,0" FontWeight="SemiBold" />
                         <TextBlock Grid.Column="4" Text="{Binding TargetCommit.DisplayText, FallbackValue='(未選択)'}"
                                    VerticalAlignment="Center"
                                    Foreground="{DynamicResource SecondaryHueMidBrush}"
                                    TextTrimming="CharacterEllipsis"
-                                   ToolTip="{Binding TargetCommit.DisplayText}" />
+                                   ToolTip="{Binding TargetCommit.DisplayText}"
+                                   MouseLeftButtonDown="TargetCommitText_MouseLeftButtonDown"
+                                   Cursor="Hand" />
                     </Grid>
                     <!-- Row 2: Controls -->
                     <DockPanel>
