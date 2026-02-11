@@ -43,6 +43,9 @@ public partial class MainViewModel : ObservableObject
     private string _repositoryPath = string.Empty;
 
     [ObservableProperty]
+    private ObservableCollection<string> _recentRepositories = [];
+
+    [ObservableProperty]
     private ObservableCollection<CommitInfo> _commits = [];
 
     [ObservableProperty]
@@ -182,6 +185,7 @@ public partial class MainViewModel : ObservableObject
             });
 
             _settingsService.AddRecentRepository(RepositoryPath);
+            RefreshRecentRepositories();
             UpdateJumpList();
             StatusMessage = $"リポジトリを読み込みました。コミット数: {_allCommits.Count}";
         }
@@ -659,6 +663,8 @@ public partial class MainViewModel : ObservableObject
 
     public async Task InitializeAsync(string? repositoryPath)
     {
+        RefreshRecentRepositories();
+
         if (!string.IsNullOrWhiteSpace(repositoryPath))
         {
             RepositoryPath = repositoryPath;
@@ -674,6 +680,12 @@ public partial class MainViewModel : ObservableObject
         }
 
         UpdateJumpList();
+    }
+
+    private void RefreshRecentRepositories()
+    {
+        var settings = _settingsService.Load();
+        RecentRepositories = new ObservableCollection<string>(settings.RecentRepositories);
     }
 
     private void UpdateJumpList()

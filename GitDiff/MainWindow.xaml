@@ -32,12 +32,15 @@
             <ToolBar Band="0" BandIndex="0" ClipToBounds="True"
                      Style="{DynamicResource MaterialDesignToolBar}">
                 <materialDesign:PackIcon Kind="Git" Width="20" Height="20" VerticalAlignment="Center" />
-                <TextBox Text="{Binding RepositoryPath, UpdateSourceTrigger=PropertyChanged}"
-                         materialDesign:HintAssist.Hint="リポジトリパス"
-                         materialDesign:TextFieldAssist.HasClearButton="True"
-                         Width="360"
-                         VerticalAlignment="Center"
-                         Margin="4,0" />
+                <ComboBox x:Name="RepositoryComboBox"
+                          Text="{Binding RepositoryPath, UpdateSourceTrigger=PropertyChanged}"
+                          ItemsSource="{Binding RecentRepositories}"
+                          IsEditable="True"
+                          materialDesign:HintAssist.Hint="リポジトリパス"
+                          Width="360"
+                          VerticalAlignment="Center"
+                          Margin="4,0"
+                          SelectionChanged="RepositoryComboBox_SelectionChanged" />
                 <Button Command="{Binding BrowseRepositoryCommand}"
                         Content="参照"
                         Style="{StaticResource MaterialDesignFlatButton}"

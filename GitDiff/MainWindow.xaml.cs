@@ -98,6 +98,16 @@ public partial class MainWindow : Window
         CommitsGrid.ScrollIntoView(commit);
     }
 
+    private async void RepositoryComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (e.AddedItems.Count > 0 && e.AddedItems[0] is string path
+            && DataContext is MainViewModel vm)
+        {
+            vm.RepositoryPath = path;
+            await vm.LoadRepositoryCommand.ExecuteAsync(null);
+        }
+    }
+
     private void UpdateBaseTarget()
     {
         if (DataContext is not MainViewModel vm) return;
