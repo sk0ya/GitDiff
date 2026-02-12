@@ -24,6 +24,7 @@ public partial class MainViewModel : ObservableObject
     private Dictionary<string, FolderTreeNode> _folderNodeLookup = new();
     private bool _suppressFolderFilter;
     private bool _multiCommitMode;
+    private List<string> _multiCommitHashes = [];
 
     private readonly IAzureDevOpsService _azureDevOpsService;
 
@@ -281,10 +282,13 @@ public partial class MainViewModel : ObservableObject
             var files = await Task.Run(() => _gitService.GetDiffFilesForCommits(repoPath, hashes));
 
             _multiCommitMode = true;
+            _multiCommitHashes = hashes.ToList();
             OnPropertyChanged(nameof(IsMultiCommitMode));
             BaseCommit = null;
             TargetCommit = null;
             MultiCommitLabel = "Multi: " + string.Join(", ", hashes);
+
+            InitMultiCommitCommitters(repoPath, hashes);
 
             _allDiffFiles = files.ToList();
             BuildFolderTree(_allDiffFiles);
@@ -333,10 +337,13 @@ public partial class MainViewModel : ObservableObject
             var files = await Task.Run(() => _gitService.GetDiffFilesForCommits(repoPath, hashes));
 
             _multiCommitMode = true;
+            _multiCommitHashes = hashes.ToList();
             OnPropertyChanged(nameof(IsMultiCommitMode));
             BaseCommit = null;
             TargetCommit = null;
             MultiCommitLabel = dialog.ResultLabel;
+
+            InitMultiCommitCommitters(repoPath, hashes);
 
             _allDiffFiles = files.ToList();
             BuildFolderTree(_allDiffFiles);
@@ -683,6 +690,73 @@ public partial class MainViewModel : ObservableObject
         CompareCommitterLabel = selected == 0 || selected == total
             ? "Committer(All)"
             : $"Committer({selected}/{total})";
+
+        if (_multiCommitMode && _multiCommitHashes.Count > 0)
+        {
+            _ = RecompareMultiCommitsAsync();
+        }
+    }
+
+    private void InitMultiCommitCommitters(string repoPath, IReadOnlyList<string> hashes)
+    {
+        try
+        {
+            var committers = _gitService.GetCommittersForCommits(repoPath, hashes);
+            var items = committers.Select(name => new SelectableCommitter { Name = name }).ToList();
+            foreach (var item in items)
+            {
+                item.PropertyChanged += (_, _) => UpdateCompareCommitterLabel();
+            }
+            CompareCommitters = new ObservableCollection<SelectableCommitter>(items);
+            CompareCommitterLabel = "Committer(All)";
+        }
+        catch
+        {
+            CompareCommitters = [];
+            CompareCommitterLabel = "Committer(All)";
+        }
+    }
+
+    private async Task RecompareMultiCommitsAsync()
+    {
+        if (!_multiCommitMode || _multiCommitHashes.Count == 0 || IsLoading) return;
+
+        var selectedCommitters = CompareCommitters
+            .Where(c => c.IsSelected)
+            .Select(c => c.Name)
+            .ToList();
+        var useFilter = selectedCommitters.Count > 0
+            && selectedCommitters.Count < CompareCommitters.Count;
+
+        IsLoading = true;
+        StatusMessage = "差分を抽出中...";
+
+        try
+        {
+            var repoPath = RepositoryPath;
+            var hashes = _multiCommitHashes;
+
+            var files = await Task.Run(() =>
+            {
+                return useFilter
+                    ? _gitService.GetDiffFilesForCommits(repoPath, hashes, selectedCommitters)
+                    : _gitService.GetDiffFilesForCommits(repoPath, hashes);
+            });
+
+            _allDiffFiles = files.ToList();
+            BuildFolderTree(_allDiffFiles);
+            ApplyFolderFilter();
+
+            StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件 ({hashes.Count} commits)";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"エラー: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
     }
 
     [RelayCommand]

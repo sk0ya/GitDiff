@@ -15,4 +15,6 @@ public interface IGitService
     IReadOnlyList<FileCommitInfo> GetFileCommitsBetween(string repoPath, string baseCommitHash, string targetCommitHash, string filePath);
     FileDiffResult GetFileDiff(string repoPath, string oldCommitHash, string newCommitHash, string filePath);
     IReadOnlyList<DiffFileInfo> GetDiffFilesForCommits(string repoPath, IReadOnlyList<string> commitHashes);
+    IReadOnlyList<DiffFileInfo> GetDiffFilesForCommits(string repoPath, IReadOnlyList<string> commitHashes, IReadOnlyList<string> committerFilter);
+    IReadOnlyList<string> GetCommittersForCommits(string repoPath, IReadOnlyList<string> commitHashes);
 }

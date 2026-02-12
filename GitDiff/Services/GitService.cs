@@ -414,6 +414,28 @@ public class GitService : IGitService
 
     public IReadOnlyList<DiffFileInfo> GetDiffFilesForCommits(string repoPath, IReadOnlyList<string> commitHashes)
     {
+        return GetDiffFilesForCommitsCore(repoPath, commitHashes, committerFilter: null);
+    }
+
+    public IReadOnlyList<DiffFileInfo> GetDiffFilesForCommits(string repoPath, IReadOnlyList<string> commitHashes, IReadOnlyList<string> committerFilter)
+    {
+        return GetDiffFilesForCommitsCore(repoPath, commitHashes, committerFilter);
+    }
+
+    public IReadOnlyList<string> GetCommittersForCommits(string repoPath, IReadOnlyList<string> commitHashes)
+    {
+        using var repo = new Repository(repoPath);
+        return commitHashes
+            .Select(h => repo.Lookup<Commit>(h))
+            .Where(c => c != null)
+            .Select(c => c!.Author.Name)
+            .Distinct()
+            .OrderBy(n => n)
+            .ToList();
+    }
+
+    private IReadOnlyList<DiffFileInfo> GetDiffFilesForCommitsCore(string repoPath, IReadOnlyList<string> commitHashes, IReadOnlyList<string>? committerFilter)
+    {
         using var repo = new Repository(repoPath);
 
         // Resolve each hash and pair with parent, sorted by date (oldest first)
@@ -428,10 +450,16 @@ public class GitService : IGitService
         }
         commits.Sort((a, b) => a.commit.Author.When.CompareTo(b.commit.Author.When));
 
+        var committerSet = committerFilter != null
+            ? new HashSet<string>(committerFilter, StringComparer.OrdinalIgnoreCase)
+            : null;
         var result = new Dictionary<string, DiffFileInfo>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var (commit, parent) in commits)
         {
+            if (committerSet != null && !committerSet.Contains(commit.Author.Name))
+                continue;
+
             TreeChanges treeDiff;
             if (parent == null)
                 treeDiff = repo.Diff.Compare<TreeChanges>(null, commit.Tree);
