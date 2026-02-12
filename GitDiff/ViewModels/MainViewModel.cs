@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GitDiff.Models;
 using GitDiff.Services;
+using GitDiff.Views;
 using Microsoft.Win32;
 
 namespace GitDiff.ViewModels;
@@ -22,6 +23,7 @@ public partial class MainViewModel : ObservableObject
     private List<DiffFileInfo> _allDiffFiles = [];
     private Dictionary<string, FolderTreeNode> _folderNodeLookup = new();
     private bool _suppressFolderFilter;
+    private bool _multiCommitMode;
 
     public MainViewModel()
         : this(new GitService(), new FileExportService(new GitService()), new C0CaseService(), new SettingsService())
@@ -99,6 +101,10 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private int _diffFileCount;
 
+    [ObservableProperty]
+    private string _multiCommitLabel = string.Empty;
+
+    public bool IsMultiCommitMode => _multiCommitMode;
     public bool HasBaseCommit => BaseCommit != null;
     public bool HasTargetCommit => TargetCommit != null;
 
@@ -231,11 +237,57 @@ public partial class MainViewModel : ObservableObject
                     : _gitService.GetDiffFiles(repoPath, baseHash, targetHash, excludeMerge);
             });
 
+            _multiCommitMode = false;
+            OnPropertyChanged(nameof(IsMultiCommitMode));
+            MultiCommitLabel = string.Empty;
             _allDiffFiles = files.ToList();
             BuildFolderTree(_allDiffFiles);
             ApplyFolderFilter();
 
             StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"エラー: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task CompareMultiCommits()
+    {
+        if (string.IsNullOrWhiteSpace(RepositoryPath))
+        {
+            StatusMessage = "リポジトリを先に選択してください。";
+            return;
+        }
+
+        var dialog = new CommitHashInputDialog { Owner = Application.Current.MainWindow };
+        if (dialog.ShowDialog() != true) return;
+
+        var hashes = dialog.CommitHashes;
+        IsLoading = true;
+        StatusMessage = "差分を抽出中...";
+
+        try
+        {
+            var repoPath = RepositoryPath;
+            var files = await Task.Run(() => _gitService.GetDiffFilesForCommits(repoPath, hashes));
+
+            _multiCommitMode = true;
+            OnPropertyChanged(nameof(IsMultiCommitMode));
+            BaseCommit = null;
+            TargetCommit = null;
+            MultiCommitLabel = "Multi: " + string.Join(", ", hashes);
+
+            _allDiffFiles = files.ToList();
+            BuildFolderTree(_allDiffFiles);
+            ApplyFolderFilter();
+
+            StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件 ({hashes.Count} commits)";
         }
         catch (Exception ex)
         {
@@ -256,7 +308,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        if (TargetCommit == null) return;
+        if (!_multiCommitMode && TargetCommit == null) return;
 
         var dialog = new OpenFolderDialog
         {
@@ -271,7 +323,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var repoPath = RepositoryPath;
-            var commitHash = TargetCommit.Hash;
+            var commitHash = _multiCommitMode ? string.Empty : TargetCommit!.Hash;
             var files = DiffFiles.ToList();
             var outputPath = dialog.FolderName;
 
@@ -293,7 +345,13 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task GenerateC0Cases()
     {
-        if (DiffFiles.Count == 0 || BaseCommit == null || TargetCommit == null)
+        if (DiffFiles.Count == 0)
+        {
+            StatusMessage = "差分ファイルがありません。";
+            return;
+        }
+
+        if (!_multiCommitMode && (BaseCommit == null || TargetCommit == null))
         {
             StatusMessage = "差分ファイルがありません。";
             return;
@@ -316,8 +374,8 @@ public partial class MainViewModel : ObservableObject
             }
 
             var repoPath = RepositoryPath;
-            var baseHash = BaseCommit.Hash;
-            var targetHash = TargetCommit.Hash;
+            var baseHash = _multiCommitMode ? null : BaseCommit!.Hash;
+            var targetHash = _multiCommitMode ? null : TargetCommit!.Hash;
 
             var allCases = await Task.Run(() =>
             {
@@ -325,10 +383,13 @@ public partial class MainViewModel : ObservableObject
 
                 foreach (var file in csFiles)
                 {
-                    var changedLines = _gitService.GetChangedLineNumbers(repoPath, baseHash, targetHash, file.FilePath);
+                    var fileBase = file.BaseCommitHash ?? baseHash!;
+                    var fileTarget = file.SourceCommitHash ?? targetHash!;
+
+                    var changedLines = _gitService.GetChangedLineNumbers(repoPath, fileBase, fileTarget, file.FilePath);
                     if (changedLines.Count == 0) continue;
 
-                    var contentBytes = _gitService.GetFileContent(repoPath, targetHash, file.FilePath);
+                    var contentBytes = _gitService.GetFileContent(repoPath, fileTarget, file.FilePath);
                     if (contentBytes == null) continue;
 
                     var content = Encoding.UTF8.GetString(contentBytes);

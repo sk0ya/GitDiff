@@ -64,7 +64,6 @@ public partial class MainWindow : Window
     private void DiffFilesGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (DataContext is not MainViewModel vm) return;
-        if (vm.BaseCommit == null || vm.TargetCommit == null) return;
 
         var dep = (DependencyObject)e.OriginalSource;
         while (dep != null && dep is not DataGridRow)
@@ -73,9 +72,24 @@ public partial class MainWindow : Window
         if (dep is not DataGridRow row) return;
         if (row.Item is not DiffFileInfo fileInfo) return;
 
+        string baseHash, targetHash;
+        if (vm.IsMultiCommitMode)
+        {
+            if (string.IsNullOrEmpty(fileInfo.BaseCommitHash) || string.IsNullOrEmpty(fileInfo.SourceCommitHash))
+                return;
+            baseHash = fileInfo.BaseCommitHash;
+            targetHash = fileInfo.SourceCommitHash;
+        }
+        else
+        {
+            if (vm.BaseCommit == null || vm.TargetCommit == null) return;
+            baseHash = vm.BaseCommit.Hash;
+            targetHash = vm.TargetCommit.Hash;
+        }
+
         var diffVm = new DiffViewerViewModel(
             vm.GitService, vm.RepositoryPath,
-            vm.BaseCommit.Hash, vm.TargetCommit.Hash, fileInfo);
+            baseHash, targetHash, fileInfo);
 
         var window = new DiffViewerWindow(diffVm) { Owner = this };
         window.Show();

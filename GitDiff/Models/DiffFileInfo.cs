@@ -14,6 +14,8 @@ public class DiffFileInfo
     public string FilePath { get; init; } = string.Empty;
     public ChangeStatus Status { get; init; }
     public string? OldPath { get; init; }
+    public string? SourceCommitHash { get; init; }
+    public string? BaseCommitHash { get; init; }
 
     public string StatusText => Status switch
     {

@@ -21,7 +21,7 @@ public class FileExportService : IFileExportService
             if (file.Status == ChangeStatus.Deleted)
                 continue;
 
-            var content = _gitService.GetFileContent(repoPath, commitHash, file.FilePath);
+            var content = _gitService.GetFileContent(repoPath, file.SourceCommitHash ?? commitHash, file.FilePath);
             if (content == null)
                 continue;
 

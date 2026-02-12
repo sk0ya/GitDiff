@@ -412,6 +412,85 @@ public class GitService : IGitService
         return result;
     }
 
+    public IReadOnlyList<DiffFileInfo> GetDiffFilesForCommits(string repoPath, IReadOnlyList<string> commitHashes)
+    {
+        using var repo = new Repository(repoPath);
+
+        // Resolve each hash and pair with parent, sorted by date (oldest first)
+        var commits = new List<(Commit commit, Commit? parent)>();
+        foreach (var hash in commitHashes)
+        {
+            var commit = repo.Lookup<Commit>(hash);
+            if (commit == null)
+                throw new ArgumentException($"コミットが見つかりません: {hash}");
+            var parent = commit.Parents.FirstOrDefault();
+            commits.Add((commit, parent));
+        }
+        commits.Sort((a, b) => a.commit.Author.When.CompareTo(b.commit.Author.When));
+
+        var result = new Dictionary<string, DiffFileInfo>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (commit, parent) in commits)
+        {
+            TreeChanges treeDiff;
+            if (parent == null)
+                treeDiff = repo.Diff.Compare<TreeChanges>(null, commit.Tree);
+            else
+                treeDiff = repo.Diff.Compare<TreeChanges>(parent.Tree, commit.Tree);
+
+            var parentHash = parent?.Sha ?? string.Empty;
+
+            foreach (var change in treeDiff)
+            {
+                var status = MapStatus(change.Status);
+                var oldPath = change.OldPath != change.Path ? change.OldPath : null;
+
+                if (result.TryGetValue(change.Path, out var existing))
+                {
+                    if (existing.Status == ChangeStatus.Added && status == ChangeStatus.Deleted)
+                    {
+                        result.Remove(change.Path);
+                        continue;
+                    }
+                    if (existing.Status == ChangeStatus.Added && status == ChangeStatus.Modified)
+                    {
+                        // Keep Added status but update source commit to latest
+                        result[change.Path] = new DiffFileInfo
+                        {
+                            FilePath = existing.FilePath,
+                            OldPath = existing.OldPath,
+                            Status = ChangeStatus.Added,
+                            SourceCommitHash = commit.Sha,
+                            BaseCommitHash = existing.BaseCommitHash
+                        };
+                        continue;
+                    }
+                    result[change.Path] = new DiffFileInfo
+                    {
+                        FilePath = change.Path,
+                        OldPath = oldPath ?? existing.OldPath,
+                        Status = status,
+                        SourceCommitHash = commit.Sha,
+                        BaseCommitHash = existing.BaseCommitHash
+                    };
+                }
+                else
+                {
+                    result[change.Path] = new DiffFileInfo
+                    {
+                        FilePath = change.Path,
+                        OldPath = oldPath,
+                        Status = status,
+                        SourceCommitHash = commit.Sha,
+                        BaseCommitHash = parentHash
+                    };
+                }
+            }
+        }
+
+        return result.Values.ToList();
+    }
+
     private static ChangeStatus MapStatus(ChangeKind kind) => kind switch
     {
         ChangeKind.Added => ChangeStatus.Added,
