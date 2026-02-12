@@ -25,18 +25,21 @@ public partial class MainViewModel : ObservableObject
     private bool _suppressFolderFilter;
     private bool _multiCommitMode;
 
+    private readonly IAzureDevOpsService _azureDevOpsService;
+
     public MainViewModel()
-        : this(new GitService(), new FileExportService(new GitService()), new C0CaseService(), new SettingsService())
+        : this(new GitService(), new FileExportService(new GitService()), new C0CaseService(), new SettingsService(), new AzureDevOpsService())
     {
     }
 
     public MainViewModel(IGitService gitService, IFileExportService fileExportService,
-        IC0CaseService c0CaseService, ISettingsService settingsService)
+        IC0CaseService c0CaseService, ISettingsService settingsService, IAzureDevOpsService azureDevOpsService)
     {
         _gitService = gitService;
         _fileExportService = fileExportService;
         _c0CaseService = c0CaseService;
         _settingsService = settingsService;
+        _azureDevOpsService = azureDevOpsService;
     }
 
     public IGitService GitService => _gitService;
@@ -282,6 +285,58 @@ public partial class MainViewModel : ObservableObject
             BaseCommit = null;
             TargetCommit = null;
             MultiCommitLabel = "Multi: " + string.Join(", ", hashes);
+
+            _allDiffFiles = files.ToList();
+            BuildFolderTree(_allDiffFiles);
+            ApplyFolderFilter();
+
+            StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件 ({hashes.Count} commits)";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"エラー: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task CompareAzureDevOpsPR()
+    {
+        if (string.IsNullOrWhiteSpace(RepositoryPath))
+        {
+            StatusMessage = "リポジトリを先に選択してください。";
+            return;
+        }
+
+        var dialog = new AzureDevOpsDialog(_azureDevOpsService, _settingsService)
+        {
+            Owner = Application.Current.MainWindow
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        var hashes = dialog.ResultCommitHashes;
+        if (hashes.Count == 0)
+        {
+            StatusMessage = "コミットが見つかりませんでした。";
+            return;
+        }
+
+        IsLoading = true;
+        StatusMessage = "差分を抽出中...";
+
+        try
+        {
+            var repoPath = RepositoryPath;
+            var files = await Task.Run(() => _gitService.GetDiffFilesForCommits(repoPath, hashes));
+
+            _multiCommitMode = true;
+            OnPropertyChanged(nameof(IsMultiCommitMode));
+            BaseCommit = null;
+            TargetCommit = null;
+            MultiCommitLabel = dialog.ResultLabel;
 
             _allDiffFiles = files.ToList();
             BuildFolderTree(_allDiffFiles);

@@ -351,6 +351,16 @@
                                 <TextBlock Text="Multi Commits" />
                             </StackPanel>
                         </Button>
+                        <Button DockPanel.Dock="Right"
+                                Command="{Binding CompareAzureDevOpsPRCommand}"
+                                Style="{StaticResource MaterialDesignRaisedButton}"
+                                materialDesign:ButtonAssist.CornerRadius="3"
+                                Padding="12,4" Height="30" Margin="8,0,0,0">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="CloudSync" Width="16" Height="16" Margin="0,0,4,0" />
+                                <TextBlock Text="Azure DevOps" />
+                            </StackPanel>
+                        </Button>
                         <CheckBox DockPanel.Dock="Right"
                                   IsChecked="{Binding ExcludeMergeCommits}"
                                   Content="Mergeコミットを除外"
