@@ -1,7 +1,9 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using GitDiff.Models;
 using GitDiff.Services;
+using MaterialDesignThemes.Wpf;
 
 namespace GitDiff.Views;
 
@@ -249,57 +251,193 @@ public partial class AzureDevOpsDialog : Window
 
     private TreeViewItem BuildWorkItemNode(AzureDevOpsWorkItem wi)
     {
-        var wiNode = new TreeViewItem { IsExpanded = true };
+        var wiNode = new TreeViewItem { IsExpanded = true, Margin = new Thickness(0, 2, 0, 2) };
 
+        // Work Item header with icon and checkbox
+        var wiPanel = new StackPanel { Orientation = Orientation.Horizontal };
         var wiCheckBox = new CheckBox
         {
-            Content = $"#{wi.Id} {wi.WorkItemType}: {wi.Title}",
             IsChecked = true,
-            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 3, 0),
             Tag = wi
         };
         wiCheckBox.Checked += (_, _) => { wi.IsSelected = true; UpdateCommitCount(); };
         wiCheckBox.Unchecked += (_, _) => { wi.IsSelected = false; UpdateCommitCount(); };
-        wiNode.Header = wiCheckBox;
+        wiPanel.Children.Add(wiCheckBox);
+
+        var wiIcon = new PackIcon
+        {
+            Kind = GetWorkItemIcon(wi.WorkItemType),
+            Width = 15, Height = 15,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = GetWorkItemBrush(wi.WorkItemType),
+            Margin = new Thickness(0, 0, 4, 0)
+        };
+        wiPanel.Children.Add(wiIcon);
+
+        var wiIdText = new TextBlock
+        {
+            Text = $"#{wi.Id}",
+            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 5, 0)
+        };
+        wiPanel.Children.Add(wiIdText);
+
+        var wiTypeText = new TextBlock
+        {
+            Text = wi.WorkItemType,
+            FontSize = 10,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = GetWorkItemBrush(wi.WorkItemType),
+            Background = GetWorkItemBackgroundBrush(wi.WorkItemType),
+            Padding = new Thickness(4, 1, 4, 1),
+            Margin = new Thickness(0, 0, 5, 0)
+        };
+        wiPanel.Children.Add(wiTypeText);
+
+        var wiTitleText = new TextBlock
+        {
+            Text = wi.Title,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxWidth = 400
+        };
+        wiPanel.Children.Add(wiTitleText);
+        wiNode.Header = wiPanel;
 
         // Add PR nodes
         foreach (var prId in wi.LinkedPullRequestIds)
         {
             if (_pullRequests.TryGetValue(prId, out var pr))
             {
-                var prNode = new TreeViewItem
+                var prPanel = new StackPanel { Orientation = Orientation.Horizontal };
+
+                var prIcon = new PackIcon
                 {
-                    Header = $"PR #{pr.Id}: {pr.Title}",
-                    IsExpanded = true
+                    Kind = PackIconKind.SourcePull,
+                    Width = 14, Height = 14,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Foreground = new SolidColorBrush(Color.FromRgb(130, 80, 223)),
+                    Margin = new Thickness(0, 0, 4, 0)
                 };
+                prPanel.Children.Add(prIcon);
+
+                var prIdText = new TextBlock
+                {
+                    Text = $"!{pr.Id}",
+                    FontWeight = FontWeights.Medium,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Foreground = new SolidColorBrush(Color.FromRgb(130, 80, 223)),
+                    Margin = new Thickness(0, 0, 5, 0),
+                    FontSize = 11
+                };
+                prPanel.Children.Add(prIdText);
+
+                var prTitleText = new TextBlock
+                {
+                    Text = pr.Title,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    MaxWidth = 350,
+                    FontSize = 11
+                };
+                prPanel.Children.Add(prTitleText);
 
                 if (pr.CommitHashes.Count > 0)
                 {
-                    var commitsText = string.Join(", ", pr.CommitHashes.Select(h => h.Length >= 7 ? h[..7] : h));
-                    prNode.Items.Add(new TreeViewItem
+                    var commitBadge = new Border
                     {
-                        Header = new TextBlock
+                        Background = new SolidColorBrush(Color.FromRgb(100, 100, 100)),
+                        CornerRadius = new CornerRadius(7),
+                        Padding = new Thickness(5, 0, 5, 0),
+                        Margin = new Thickness(5, 0, 0, 0),
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Child = new TextBlock
                         {
-                            Text = commitsText,
-                            FontFamily = new System.Windows.Media.FontFamily("Consolas"),
-                            FontSize = 11,
-                            Foreground = System.Windows.Media.Brushes.Gray
+                            Text = $"{pr.CommitHashes.Count} commits",
+                            FontSize = 9,
+                            Foreground = Brushes.White
                         }
-                    });
+                    };
+                    prPanel.Children.Add(commitBadge);
+                }
+
+                var prNode = new TreeViewItem
+                {
+                    Header = prPanel,
+                    IsExpanded = false,
+                    Margin = new Thickness(0)
+                };
+
+                // Add commit items
+                if (pr.CommitHashes.Count > 0)
+                {
+                    foreach (var hash in pr.CommitHashes)
+                    {
+                        var commitPanel = new StackPanel { Orientation = Orientation.Horizontal };
+
+                        var commitIcon = new PackIcon
+                        {
+                            Kind = PackIconKind.SourceCommit,
+                            Width = 13, Height = 13,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            Foreground = Brushes.Gray,
+                            Margin = new Thickness(0, 0, 3, 0)
+                        };
+                        commitPanel.Children.Add(commitIcon);
+
+                        var commitText = new TextBlock
+                        {
+                            Text = hash.Length >= 7 ? hash[..7] : hash,
+                            FontFamily = new FontFamily("Consolas"),
+                            FontSize = 10,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            Foreground = Brushes.Gray
+                        };
+                        commitPanel.Children.Add(commitText);
+
+                        prNode.Items.Add(new TreeViewItem
+                        {
+                            Header = commitPanel,
+                            Padding = new Thickness(0),
+                            Margin = new Thickness(0),
+                            MinHeight = 18
+                        });
+                    }
                 }
                 else
                 {
                     prNode.Items.Add(new TreeViewItem
                     {
-                        Header = new TextBlock { Text = "(コミットなし)", FontStyle = FontStyles.Italic },
-                        IsEnabled = false
+                        Header = new TextBlock { Text = "(コミットなし)", FontStyle = FontStyles.Italic, Foreground = Brushes.Gray, FontSize = 11 },
+                        IsEnabled = false,
+                        Margin = new Thickness(0),
+                        MinHeight = 18
                     });
                 }
                 wiNode.Items.Add(prNode);
             }
             else
             {
-                wiNode.Items.Add(new TreeViewItem { Header = $"PR #{prId}: (取得失敗)" });
+                var failPanel = new StackPanel { Orientation = Orientation.Horizontal };
+                failPanel.Children.Add(new PackIcon
+                {
+                    Kind = PackIconKind.AlertCircleOutline,
+                    Width = 14, Height = 14,
+                    Foreground = Brushes.OrangeRed,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 4, 0)
+                });
+                failPanel.Children.Add(new TextBlock
+                {
+                    Text = $"PR #{prId}: (取得失敗)",
+                    Foreground = Brushes.OrangeRed,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    FontSize = 11
+                });
+                wiNode.Items.Add(new TreeViewItem { Header = failPanel, Margin = new Thickness(0) });
             }
         }
 
@@ -312,13 +450,46 @@ public partial class AzureDevOpsDialog : Window
         {
             wiNode.Items.Add(new TreeViewItem
             {
-                Header = new TextBlock { Text = "(PRなし)", FontStyle = FontStyles.Italic },
-                IsEnabled = false
+                Header = new TextBlock { Text = "(PRなし)", FontStyle = FontStyles.Italic, Foreground = Brushes.Gray, FontSize = 11 },
+                IsEnabled = false,
+                Margin = new Thickness(0),
+                MinHeight = 18
             });
         }
 
         return wiNode;
     }
+
+    private static PackIconKind GetWorkItemIcon(string workItemType) => workItemType.ToLower() switch
+    {
+        "bug" => PackIconKind.Bug,
+        "task" => PackIconKind.CheckboxMarkedCircleOutline,
+        "user story" => PackIconKind.BookOpenPageVariant,
+        "feature" => PackIconKind.TrophyVariant,
+        "epic" => PackIconKind.FlashOutline,
+        "issue" => PackIconKind.AlertCircleOutline,
+        _ => PackIconKind.CardText
+    };
+
+    private static SolidColorBrush GetWorkItemBrush(string workItemType) => workItemType.ToLower() switch
+    {
+        "bug" => new SolidColorBrush(Color.FromRgb(204, 41, 61)),
+        "task" => new SolidColorBrush(Color.FromRgb(242, 203, 29)),
+        "user story" => new SolidColorBrush(Color.FromRgb(0, 156, 204)),
+        "feature" => new SolidColorBrush(Color.FromRgb(119, 59, 147)),
+        "epic" => new SolidColorBrush(Color.FromRgb(255, 123, 0)),
+        _ => new SolidColorBrush(Color.FromRgb(150, 150, 150))
+    };
+
+    private static SolidColorBrush GetWorkItemBackgroundBrush(string workItemType) => workItemType.ToLower() switch
+    {
+        "bug" => new SolidColorBrush(Color.FromArgb(30, 204, 41, 61)),
+        "task" => new SolidColorBrush(Color.FromArgb(30, 242, 203, 29)),
+        "user story" => new SolidColorBrush(Color.FromArgb(30, 0, 156, 204)),
+        "feature" => new SolidColorBrush(Color.FromArgb(30, 119, 59, 147)),
+        "epic" => new SolidColorBrush(Color.FromArgb(30, 255, 123, 0)),
+        _ => new SolidColorBrush(Color.FromArgb(20, 150, 150, 150))
+    };
 
     private void UpdateCommitCount()
     {
