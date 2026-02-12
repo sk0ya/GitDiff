@@ -45,12 +45,13 @@ public class AzureDevOpsService : IAzureDevOpsService
                 WorkItemType = GetFieldString(item, "System.WorkItemType")
             };
 
-            // Extract linked PR IDs from relations
+            // Extract linked PR IDs and child work item IDs from relations
             if (item.TryGetProperty("relations", out var relations))
             {
                 foreach (var rel in relations.EnumerateArray())
                 {
                     var relUrl = rel.GetProperty("url").GetString() ?? string.Empty;
+                    var relType = rel.TryGetProperty("rel", out var relEl) ? relEl.GetString() ?? string.Empty : string.Empty;
                     var relName = string.Empty;
                     if (rel.TryGetProperty("attributes", out var attrs) &&
                         attrs.TryGetProperty("name", out var nameEl))
@@ -64,6 +65,15 @@ public class AzureDevOpsService : IAzureDevOpsService
                         var prId = ExtractPullRequestIdFromUrl(relUrl);
                         if (prId > 0)
                             wi.LinkedPullRequestIds.Add(prId);
+                    }
+
+                    // Child links: System.LinkTypes.Hierarchy-Forward
+                    if (relType == "System.LinkTypes.Hierarchy-Forward"
+                        || relName.Equals("Child", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var childId = ExtractWorkItemIdFromUrl(relUrl);
+                        if (childId > 0)
+                            wi.ChildWorkItemIds.Add(childId);
                     }
                 }
             }
@@ -148,6 +158,22 @@ public class AzureDevOpsService : IAzureDevOpsService
             return value.GetString() ?? string.Empty;
         }
         return string.Empty;
+    }
+
+    private static int ExtractWorkItemIdFromUrl(string url)
+    {
+        // Format: https://dev.azure.com/{org}/{project}/_apis/wit/workItems/{id}
+        try
+        {
+            var idx = url.LastIndexOf('/');
+            if (idx >= 0 && int.TryParse(url[(idx + 1)..], out var id))
+                return id;
+        }
+        catch
+        {
+            // Ignore parse errors
+        }
+        return 0;
     }
 
     private static int ExtractPullRequestIdFromUrl(string url)

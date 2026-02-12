@@ -6,6 +6,8 @@ public class AzureDevOpsWorkItem
     public string Title { get; set; } = string.Empty;
     public string WorkItemType { get; set; } = string.Empty;
     public List<int> LinkedPullRequestIds { get; set; } = [];
+    public List<int> ChildWorkItemIds { get; set; } = [];
+    public List<AzureDevOpsWorkItem> Children { get; set; } = [];
     public bool IsSelected { get; set; } = true;
 }
 

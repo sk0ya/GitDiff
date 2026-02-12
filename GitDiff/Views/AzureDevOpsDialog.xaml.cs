@@ -144,29 +144,35 @@ public partial class AzureDevOpsDialog : Window
             // 1. Fetch work items
             _workItems = await _azureService.GetWorkItemsAsync(org, project, pat, ids);
 
-            // 2. Collect all PR IDs
-            var allPrIds = _workItems.SelectMany(wi => wi.LinkedPullRequestIds).Distinct().ToList();
+            // 2. Recursively fetch child work items
+            SetStatus("子Work Itemを取得中...");
+            await FetchChildrenRecursive(_workItems, org, project, pat);
+
+            // 3. Collect all PR IDs (including children)
+            var allPrIds = CollectAllPrIds(_workItems);
 
             if (allPrIds.Count == 0)
             {
                 SetStatus("紐づくPull Requestが見つかりませんでした。");
+                BuildResultsTree();
                 SetLoading(false);
                 return;
             }
 
             SetStatus($"PR を取得中... ({allPrIds.Count} 件)");
 
-            // 3. Fetch PR details and commits
+            // 4. Fetch PR details and commits
             var prs = await _azureService.GetPullRequestsWithCommitsAsync(org, project, repoName, pat, allPrIds);
             _pullRequests = prs.ToDictionary(p => p.Id);
 
-            // 4. Build tree display
+            // 5. Build tree display
             BuildResultsTree();
 
             var totalCommits = _pullRequests.Values.SelectMany(p => p.CommitHashes).Distinct().Count();
+            var totalWiCount = CountAllWorkItems(_workItems);
             CommitCountRun.Text = $" (コミット数: {totalCommits})";
             OkButton.IsEnabled = totalCommits > 0;
-            SetStatus($"取得完了: {_workItems.Count} Work Items, {allPrIds.Count} PRs, {totalCommits} Commits");
+            SetStatus($"取得完了: {totalWiCount} Work Items, {allPrIds.Count} PRs, {totalCommits} Commits");
         }
         catch (Exception ex)
         {
@@ -178,93 +184,148 @@ public partial class AzureDevOpsDialog : Window
         }
     }
 
+    private async Task FetchChildrenRecursive(List<AzureDevOpsWorkItem> workItems,
+        string org, string project, string pat, HashSet<int>? fetched = null)
+    {
+        fetched ??= new HashSet<int>(workItems.Select(wi => wi.Id));
+
+        var childIdsToFetch = workItems
+            .SelectMany(wi => wi.ChildWorkItemIds)
+            .Where(id => fetched.Add(id)) // Add returns false if already present
+            .Distinct()
+            .ToList();
+
+        if (childIdsToFetch.Count == 0) return;
+
+        var children = await _azureService.GetWorkItemsAsync(org, project, pat, childIdsToFetch);
+
+        // Assign children to their parents
+        var childLookup = children.ToDictionary(c => c.Id);
+        foreach (var wi in workItems)
+        {
+            foreach (var childId in wi.ChildWorkItemIds)
+            {
+                if (childLookup.TryGetValue(childId, out var child))
+                    wi.Children.Add(child);
+            }
+        }
+
+        // Recurse for grandchildren
+        if (children.Any(c => c.ChildWorkItemIds.Count > 0))
+            await FetchChildrenRecursive(children, org, project, pat, fetched);
+    }
+
+    private static List<int> CollectAllPrIds(List<AzureDevOpsWorkItem> workItems)
+    {
+        var result = new HashSet<int>();
+        CollectPrIdsRecursive(workItems, result);
+        return result.ToList();
+    }
+
+    private static void CollectPrIdsRecursive(List<AzureDevOpsWorkItem> workItems, HashSet<int> result)
+    {
+        foreach (var wi in workItems)
+        {
+            foreach (var prId in wi.LinkedPullRequestIds)
+                result.Add(prId);
+            CollectPrIdsRecursive(wi.Children, result);
+        }
+    }
+
+    private static int CountAllWorkItems(List<AzureDevOpsWorkItem> workItems)
+    {
+        var count = workItems.Count;
+        foreach (var wi in workItems)
+            count += CountAllWorkItems(wi.Children);
+        return count;
+    }
+
     private void BuildResultsTree()
     {
         ResultsTree.Items.Clear();
-
         foreach (var wi in _workItems)
+            ResultsTree.Items.Add(BuildWorkItemNode(wi));
+    }
+
+    private TreeViewItem BuildWorkItemNode(AzureDevOpsWorkItem wi)
+    {
+        var wiNode = new TreeViewItem { IsExpanded = true };
+
+        var wiCheckBox = new CheckBox
         {
-            var wiNode = new TreeViewItem
-            {
-                IsExpanded = true
-            };
+            Content = $"#{wi.Id} {wi.WorkItemType}: {wi.Title}",
+            IsChecked = true,
+            FontWeight = FontWeights.SemiBold,
+            Tag = wi
+        };
+        wiCheckBox.Checked += (_, _) => { wi.IsSelected = true; UpdateCommitCount(); };
+        wiCheckBox.Unchecked += (_, _) => { wi.IsSelected = false; UpdateCommitCount(); };
+        wiNode.Header = wiCheckBox;
 
-            var wiCheckBox = new CheckBox
+        // Add PR nodes
+        foreach (var prId in wi.LinkedPullRequestIds)
+        {
+            if (_pullRequests.TryGetValue(prId, out var pr))
             {
-                Content = $"#{wi.Id} {wi.WorkItemType}: {wi.Title}",
-                IsChecked = true,
-                FontWeight = FontWeights.SemiBold,
-                Tag = wi
-            };
-            wiCheckBox.Checked += (_, _) => { wi.IsSelected = true; UpdateCommitCount(); };
-            wiCheckBox.Unchecked += (_, _) => { wi.IsSelected = false; UpdateCommitCount(); };
-            wiNode.Header = wiCheckBox;
-
-            if (wi.LinkedPullRequestIds.Count == 0)
-            {
-                wiNode.Items.Add(new TreeViewItem
+                var prNode = new TreeViewItem
                 {
-                    Header = new TextBlock { Text = "(PRなし)", FontStyle = FontStyles.Italic },
-                    IsEnabled = false
-                });
+                    Header = $"PR #{pr.Id}: {pr.Title}",
+                    IsExpanded = true
+                };
+
+                if (pr.CommitHashes.Count > 0)
+                {
+                    var commitsText = string.Join(", ", pr.CommitHashes.Select(h => h.Length >= 7 ? h[..7] : h));
+                    prNode.Items.Add(new TreeViewItem
+                    {
+                        Header = new TextBlock
+                        {
+                            Text = commitsText,
+                            FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+                            FontSize = 11,
+                            Foreground = System.Windows.Media.Brushes.Gray
+                        }
+                    });
+                }
+                else
+                {
+                    prNode.Items.Add(new TreeViewItem
+                    {
+                        Header = new TextBlock { Text = "(コミットなし)", FontStyle = FontStyles.Italic },
+                        IsEnabled = false
+                    });
+                }
+                wiNode.Items.Add(prNode);
             }
             else
             {
-                foreach (var prId in wi.LinkedPullRequestIds)
-                {
-                    if (_pullRequests.TryGetValue(prId, out var pr))
-                    {
-                        var prNode = new TreeViewItem
-                        {
-                            Header = $"PR #{pr.Id}: {pr.Title}",
-                            IsExpanded = true
-                        };
-
-                        if (pr.CommitHashes.Count > 0)
-                        {
-                            var commitsText = string.Join(", ", pr.CommitHashes.Select(h => h.Length >= 7 ? h[..7] : h));
-                            prNode.Items.Add(new TreeViewItem
-                            {
-                                Header = new TextBlock
-                                {
-                                    Text = commitsText,
-                                    FontFamily = new System.Windows.Media.FontFamily("Consolas"),
-                                    FontSize = 11,
-                                    Foreground = System.Windows.Media.Brushes.Gray
-                                }
-                            });
-                        }
-                        else
-                        {
-                            prNode.Items.Add(new TreeViewItem
-                            {
-                                Header = new TextBlock { Text = "(コミットなし)", FontStyle = FontStyles.Italic },
-                                IsEnabled = false
-                            });
-                        }
-
-                        wiNode.Items.Add(prNode);
-                    }
-                    else
-                    {
-                        wiNode.Items.Add(new TreeViewItem { Header = $"PR #{prId}: (取得失敗)" });
-                    }
-                }
+                wiNode.Items.Add(new TreeViewItem { Header = $"PR #{prId}: (取得失敗)" });
             }
-
-            ResultsTree.Items.Add(wiNode);
         }
+
+        // Add child work item nodes recursively
+        foreach (var child in wi.Children)
+            wiNode.Items.Add(BuildWorkItemNode(child));
+
+        // Show "(PRなし)" only if no PRs and no children
+        if (wi.LinkedPullRequestIds.Count == 0 && wi.Children.Count == 0)
+        {
+            wiNode.Items.Add(new TreeViewItem
+            {
+                Header = new TextBlock { Text = "(PRなし)", FontStyle = FontStyles.Italic },
+                IsEnabled = false
+            });
+        }
+
+        return wiNode;
     }
 
     private void UpdateCommitCount()
     {
-        var selectedWiPrIds = _workItems
-            .Where(wi => wi.IsSelected)
-            .SelectMany(wi => wi.LinkedPullRequestIds)
-            .Distinct()
-            .ToList();
+        var prIds = new HashSet<int>();
+        CollectSelectedPrIds(_workItems, prIds);
 
-        var totalCommits = selectedWiPrIds
+        var totalCommits = prIds
             .Where(id => _pullRequests.ContainsKey(id))
             .SelectMany(id => _pullRequests[id].CommitHashes)
             .Distinct()
@@ -274,24 +335,34 @@ public partial class AzureDevOpsDialog : Window
         OkButton.IsEnabled = totalCommits > 0;
     }
 
+    private static void CollectSelectedPrIds(List<AzureDevOpsWorkItem> workItems, HashSet<int> result)
+    {
+        foreach (var wi in workItems)
+        {
+            if (wi.IsSelected)
+            {
+                foreach (var prId in wi.LinkedPullRequestIds)
+                    result.Add(prId);
+            }
+            CollectSelectedPrIds(wi.Children, result);
+        }
+    }
+
     private void OkButton_Click(object sender, RoutedEventArgs e)
     {
         SaveSettings();
 
-        // Collect commit hashes from selected work items
-        var selectedPrIds = _workItems
-            .Where(wi => wi.IsSelected)
-            .SelectMany(wi => wi.LinkedPullRequestIds)
-            .Distinct()
-            .ToList();
+        // Collect commit hashes from selected work items (including children)
+        var prIds = new HashSet<int>();
+        CollectSelectedPrIds(_workItems, prIds);
 
-        ResultCommitHashes = selectedPrIds
+        ResultCommitHashes = prIds
             .Where(id => _pullRequests.ContainsKey(id))
             .SelectMany(id => _pullRequests[id].CommitHashes)
             .Distinct()
             .ToList();
 
-        // Build label for display
+        // Build label for display (top-level IDs only)
         var wiIds = _workItems.Where(wi => wi.IsSelected).Select(wi => $"#{wi.Id}");
         ResultLabel = "Azure DevOps: " + string.Join(", ", wiIds);
 
