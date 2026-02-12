@@ -4,5 +4,5 @@ namespace GitDiff.Services;
 
 public interface IFileExportService
 {
-    int ExportDiffFiles(string repoPath, string commitHash, IEnumerable<DiffFileInfo> diffFiles, string outputPath);
+    int ExportDiffFiles(string repoPath, string baseCommitHash, string targetCommitHash, IEnumerable<DiffFileInfo> diffFiles, string outputPath);
 }

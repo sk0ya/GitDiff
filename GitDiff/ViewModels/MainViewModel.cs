@@ -370,7 +370,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        if (!_multiCommitMode && TargetCommit == null) return;
+        if (!_multiCommitMode && (BaseCommit == null || TargetCommit == null)) return;
 
         var dialog = new OpenFolderDialog
         {
@@ -385,12 +385,13 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var repoPath = RepositoryPath;
-            var commitHash = _multiCommitMode ? string.Empty : TargetCommit!.Hash;
+            var baseHash = _multiCommitMode ? string.Empty : BaseCommit!.Hash;
+            var targetHash = _multiCommitMode ? string.Empty : TargetCommit!.Hash;
             var files = DiffFiles.ToList();
             var outputPath = dialog.FolderName;
 
             var count = await Task.Run(() =>
-                _fileExportService.ExportDiffFiles(repoPath, commitHash, files, outputPath));
+                _fileExportService.ExportDiffFiles(repoPath, baseHash, targetHash, files, outputPath));
 
             StatusMessage = $"エクスポート完了: {count} ファイルを出力しました。";
         }

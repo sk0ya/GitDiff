@@ -12,26 +12,49 @@ public class FileExportService : IFileExportService
         _gitService = gitService;
     }
 
-    public int ExportDiffFiles(string repoPath, string commitHash, IEnumerable<DiffFileInfo> diffFiles, string outputPath)
+    public int ExportDiffFiles(string repoPath, string baseCommitHash, string targetCommitHash, IEnumerable<DiffFileInfo> diffFiles, string outputPath)
     {
         int exportedCount = 0;
+        var beforePath = Path.Combine(outputPath, "before");
+        var afterPath = Path.Combine(outputPath, "after");
 
         foreach (var file in diffFiles)
         {
-            if (file.Status == ChangeStatus.Deleted)
-                continue;
+            var afterCommit = file.SourceCommitHash ?? targetCommitHash;
+            var beforeCommit = file.BaseCommitHash ?? baseCommitHash;
 
-            var content = _gitService.GetFileContent(repoPath, file.SourceCommitHash ?? commitHash, file.FilePath);
-            if (content == null)
-                continue;
+            // Export to "after" folder (Added, Modified, Renamed, Copied)
+            if (file.Status != ChangeStatus.Deleted)
+            {
+                var content = _gitService.GetFileContent(repoPath, afterCommit, file.FilePath);
+                if (content != null)
+                {
+                    var destPath = Path.Combine(afterPath, file.FilePath.Replace('/', Path.DirectorySeparatorChar));
+                    var destDir = Path.GetDirectoryName(destPath);
+                    if (destDir != null)
+                        Directory.CreateDirectory(destDir);
 
-            var destPath = Path.Combine(outputPath, file.FilePath.Replace('/', Path.DirectorySeparatorChar));
-            var destDir = Path.GetDirectoryName(destPath);
-            if (destDir != null)
-                Directory.CreateDirectory(destDir);
+                    File.WriteAllBytes(destPath, content);
+                    exportedCount++;
+                }
+            }
 
-            File.WriteAllBytes(destPath, content);
-            exportedCount++;
+            // Export to "before" folder (Modified, Deleted, Renamed)
+            if (file.Status is ChangeStatus.Modified or ChangeStatus.Deleted or ChangeStatus.Renamed)
+            {
+                var beforeFilePath = file.OldPath ?? file.FilePath;
+                var content = _gitService.GetFileContent(repoPath, beforeCommit, beforeFilePath);
+                if (content != null)
+                {
+                    var destPath = Path.Combine(beforePath, beforeFilePath.Replace('/', Path.DirectorySeparatorChar));
+                    var destDir = Path.GetDirectoryName(destPath);
+                    if (destDir != null)
+                        Directory.CreateDirectory(destDir);
+
+                    File.WriteAllBytes(destPath, content);
+                    exportedCount++;
+                }
+            }
         }
 
         return exportedCount;
