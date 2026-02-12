@@ -427,7 +427,7 @@ public class GitService : IGitService
         using var repo = new Repository(repoPath);
         return commitHashes
             .Select(h => repo.Lookup<Commit>(h))
-            .Where(c => c != null)
+            .Where(c => c != null && c.Parents.Count() <= 1)
             .Select(c => c!.Author.Name)
             .Distinct()
             .OrderBy(n => n)
@@ -439,13 +439,17 @@ public class GitService : IGitService
         using var repo = new Repository(repoPath);
 
         // Resolve each hash and pair with parent, sorted by date (oldest first)
+        // Skip merge commits (multiple parents)
         var commits = new List<(Commit commit, Commit? parent)>();
         foreach (var hash in commitHashes)
         {
             var commit = repo.Lookup<Commit>(hash);
             if (commit == null)
                 throw new ArgumentException($"コミットが見つかりません: {hash}");
-            var parent = commit.Parents.FirstOrDefault();
+            var parents = commit.Parents.ToList();
+            if (parents.Count > 1)
+                continue; // Skip merge commits
+            var parent = parents.FirstOrDefault();
             commits.Add((commit, parent));
         }
         commits.Sort((a, b) => a.commit.Author.When.CompareTo(b.commit.Author.When));
