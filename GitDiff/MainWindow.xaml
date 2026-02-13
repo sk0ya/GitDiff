@@ -166,16 +166,11 @@
                                 </ItemsControl>
                             </ScrollViewer>
                             <Separator Margin="0,6" />
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button Content="すべて選択"
-                                        Command="{Binding SelectAllCommittersCommand}"
-                                        Style="{StaticResource MaterialDesignFlatButton}"
-                                        Padding="8,2" Height="26" FontSize="11" />
-                                <Button Content="クリア"
-                                        Command="{Binding ClearAllCommittersCommand}"
-                                        Style="{StaticResource MaterialDesignFlatButton}"
-                                        Padding="8,2" Height="26" FontSize="11" />
-                            </StackPanel>
+                            <Button Content="クリア"
+                                    Command="{Binding ClearAllCommittersCommand}"
+                                    Style="{StaticResource MaterialDesignFlatButton}"
+                                    HorizontalAlignment="Right"
+                                    Padding="8,2" Height="26" FontSize="11" />
                         </StackPanel>
                     </materialDesign:PopupBox>
                     <!-- Message filter -->
@@ -410,27 +405,24 @@
                                 </StackPanel>
                             </Border>
                         </materialDesign:PopupBox.ToggleContent>
-                        <StackPanel MinWidth="200" Margin="8">
-                            <ItemsControl ItemsSource="{Binding CompareCommitters}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <CheckBox Content="{Binding Name}"
-                                                  IsChecked="{Binding IsSelected}"
-                                                  Margin="0,2" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                        <StackPanel MinWidth="220" Margin="8">
+                            <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding CompareCommitters}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox Content="{Binding Name}"
+                                                      IsChecked="{Binding IsSelected}"
+                                                      Margin="0,2" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
                             <Separator Margin="0,6" />
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button Content="すべて選択"
-                                        Command="{Binding SelectAllCompareCommittersCommand}"
-                                        Style="{StaticResource MaterialDesignFlatButton}"
-                                        Padding="8,2" Height="26" FontSize="11" />
-                                <Button Content="クリア"
-                                        Command="{Binding ClearAllCompareCommittersCommand}"
-                                        Style="{StaticResource MaterialDesignFlatButton}"
-                                        Padding="8,2" Height="26" FontSize="11" />
-                            </StackPanel>
+                            <Button Content="クリア"
+                                    Command="{Binding ClearAllCompareCommittersCommand}"
+                                    Style="{StaticResource MaterialDesignFlatButton}"
+                                    HorizontalAlignment="Right"
+                                    Padding="8,2" Height="26" FontSize="11" />
                         </StackPanel>
                     </materialDesign:PopupBox>
                     <!-- FilePath filter -->

@@ -832,13 +832,6 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void SelectAllCompareCommitters()
-    {
-        foreach (var c in CompareCommitters)
-            c.IsSelected = true;
-    }
-
-    [RelayCommand]
     private void ClearAllCompareCommitters()
     {
         foreach (var c in CompareCommitters)
@@ -907,13 +900,6 @@ public partial class MainViewModel : ObservableObject
         {
             DateFilterLabel = $"Date(～{DateTo:yyyy/MM/dd})";
         }
-    }
-
-    [RelayCommand]
-    private void SelectAllCommitters()
-    {
-        foreach (var c in FilterCommitters)
-            c.IsSelected = true;
     }
 
     [RelayCommand]
