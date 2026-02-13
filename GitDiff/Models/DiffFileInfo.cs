@@ -16,6 +16,7 @@ public class DiffFileInfo
     public string? OldPath { get; init; }
     public string? SourceCommitHash { get; init; }
     public string? BaseCommitHash { get; init; }
+    public string? AuthorName { get; init; }
 
     public string StatusText => Status switch
     {

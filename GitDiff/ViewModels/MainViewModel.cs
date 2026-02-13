@@ -242,21 +242,10 @@ public partial class MainViewModel : ObservableObject
             var targetHash = TargetCommit.Hash;
             var repoPath = RepositoryPath;
 
-            // Get selected committers (empty or all selected = no filter)
-            var selectedCommitters = CompareCommitters
-                .Where(c => c.IsSelected)
-                .Select(c => c.Name)
-                .ToList();
-            var useCommitterFilter = selectedCommitters.Count > 0
-                && selectedCommitters.Count < CompareCommitters.Count;
             var excludeMerge = ExcludeMergeCommits;
 
             var files = await Task.Run(() =>
-            {
-                return useCommitterFilter
-                    ? _gitService.GetDiffFiles(repoPath, baseHash, targetHash, selectedCommitters, excludeMerge)
-                    : _gitService.GetDiffFiles(repoPath, baseHash, targetHash, excludeMerge);
-            });
+                _gitService.GetDiffFiles(repoPath, baseHash, targetHash, excludeMerge));
 
             _multiCommitMode = false;
             OnPropertyChanged(nameof(IsMultiCommitMode));
@@ -657,6 +646,16 @@ public partial class MainViewModel : ObservableObject
             filtered = filtered.Where(f => selectedNames.Contains(f.StatusText));
         }
 
+        var committerTotal = CompareCommitters.Count;
+        var committerSelected = CompareCommitters.Count(c => c.IsSelected);
+        if (committerSelected > 0 && committerSelected < committerTotal)
+        {
+            var selectedCommitters = new HashSet<string>(
+                CompareCommitters.Where(c => c.IsSelected).Select(c => c.Name),
+                StringComparer.OrdinalIgnoreCase);
+            filtered = filtered.Where(f => f.AuthorName != null && selectedCommitters.Contains(f.AuthorName));
+        }
+
         var result = filtered.ToList();
         DiffFiles = new ObservableCollection<DiffFileInfo>(result);
         DiffFileCount = result.Count;
@@ -725,10 +724,7 @@ public partial class MainViewModel : ObservableObject
             ? "Committer(All)"
             : $"Committer({selected}/{total})";
 
-        if (_multiCommitMode && _multiCommitHashes.Count > 0)
-        {
-            _ = RecompareMultiCommitsAsync();
-        }
+        ApplyDiffFileFilters();
     }
 
     private void InitMultiCommitCommitters(string repoPath, IReadOnlyList<string> hashes)
@@ -748,48 +744,6 @@ public partial class MainViewModel : ObservableObject
         {
             CompareCommitters = [];
             CompareCommitterLabel = "Committer(All)";
-        }
-    }
-
-    private async Task RecompareMultiCommitsAsync()
-    {
-        if (!_multiCommitMode || _multiCommitHashes.Count == 0 || IsLoading) return;
-
-        var selectedCommitters = CompareCommitters
-            .Where(c => c.IsSelected)
-            .Select(c => c.Name)
-            .ToList();
-        var useFilter = selectedCommitters.Count > 0
-            && selectedCommitters.Count < CompareCommitters.Count;
-
-        IsLoading = true;
-        StatusMessage = "差分を抽出中...";
-
-        try
-        {
-            var repoPath = RepositoryPath;
-            var hashes = _multiCommitHashes;
-
-            var files = await Task.Run(() =>
-            {
-                return useFilter
-                    ? _gitService.GetDiffFilesForCommits(repoPath, hashes, selectedCommitters)
-                    : _gitService.GetDiffFilesForCommits(repoPath, hashes);
-            });
-
-            _allDiffFiles = files.ToList();
-            BuildFolderTree(_allDiffFiles);
-            ApplyDiffFileFilters();
-
-            StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件 ({hashes.Count} commits)";
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"エラー: {ex.Message}";
-        }
-        finally
-        {
-            IsLoading = false;
         }
     }
 

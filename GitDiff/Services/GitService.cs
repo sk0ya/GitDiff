@@ -46,32 +46,8 @@ public class GitService : IGitService
         if (baseCommit == null || targetCommit == null)
             return [];
 
-        if (!excludeMergeCommits)
-        {
-            var changes = repo.Diff.Compare<TreeChanges>(baseCommit.Tree, targetCommit.Tree);
-
-            return changes.Select(change => new DiffFileInfo
-            {
-                FilePath = change.Path,
-                OldPath = change.OldPath != change.Path ? change.OldPath : null,
-                Status = MapStatus(change.Status)
-            }).ToList();
-        }
-
-        // Walk commits individually, skipping merge commits
-        return GetDiffFilesWalkingCommits(repo, baseCommit, targetCommit, committerFilter: null, excludeMergeCommits: true);
-    }
-
-    public IReadOnlyList<DiffFileInfo> GetDiffFiles(string repoPath, string baseCommitHash, string targetCommitHash, IReadOnlyList<string> committerFilter, bool excludeMergeCommits = false)
-    {
-        using var repo = new Repository(repoPath);
-        var baseCommit = repo.Lookup<Commit>(baseCommitHash);
-        var targetCommit = repo.Lookup<Commit>(targetCommitHash);
-
-        if (baseCommit == null || targetCommit == null)
-            return [];
-
-        return GetDiffFilesWalkingCommits(repo, baseCommit, targetCommit, committerFilter, excludeMergeCommits);
+        // Always walk commits to populate AuthorName
+        return GetDiffFilesWalkingCommits(repo, baseCommit, targetCommit, committerFilter: null, excludeMergeCommits);
     }
 
     private IReadOnlyList<DiffFileInfo> GetDiffFilesWalkingCommits(
@@ -135,7 +111,8 @@ public class GitService : IGitService
                     {
                         FilePath = change.Path,
                         OldPath = oldPath ?? existing.OldPath,
-                        Status = status
+                        Status = status,
+                        AuthorName = commit.Author.Name
                     };
                 }
                 else
@@ -144,7 +121,8 @@ public class GitService : IGitService
                     {
                         FilePath = change.Path,
                         OldPath = oldPath,
-                        Status = status
+                        Status = status,
+                        AuthorName = commit.Author.Name
                     };
                 }
             }
@@ -417,11 +395,6 @@ public class GitService : IGitService
         return GetDiffFilesForCommitsCore(repoPath, commitHashes, committerFilter: null);
     }
 
-    public IReadOnlyList<DiffFileInfo> GetDiffFilesForCommits(string repoPath, IReadOnlyList<string> commitHashes, IReadOnlyList<string> committerFilter)
-    {
-        return GetDiffFilesForCommitsCore(repoPath, commitHashes, committerFilter);
-    }
-
     public IReadOnlyList<string> GetCommittersForCommits(string repoPath, IReadOnlyList<string> commitHashes)
     {
         using var repo = new Repository(repoPath);
@@ -493,7 +466,8 @@ public class GitService : IGitService
                             OldPath = existing.OldPath,
                             Status = ChangeStatus.Added,
                             SourceCommitHash = commit.Sha,
-                            BaseCommitHash = existing.BaseCommitHash
+                            BaseCommitHash = existing.BaseCommitHash,
+                            AuthorName = commit.Author.Name
                         };
                         continue;
                     }
@@ -503,7 +477,8 @@ public class GitService : IGitService
                         OldPath = oldPath ?? existing.OldPath,
                         Status = status,
                         SourceCommitHash = commit.Sha,
-                        BaseCommitHash = existing.BaseCommitHash
+                        BaseCommitHash = existing.BaseCommitHash,
+                        AuthorName = commit.Author.Name
                     };
                 }
                 else
@@ -514,7 +489,8 @@ public class GitService : IGitService
                         OldPath = oldPath,
                         Status = status,
                         SourceCommitHash = commit.Sha,
-                        BaseCommitHash = parentHash
+                        BaseCommitHash = parentHash,
+                        AuthorName = commit.Author.Name
                     };
                 }
             }
