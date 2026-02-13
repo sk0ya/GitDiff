@@ -41,6 +41,7 @@ public partial class MainViewModel : ObservableObject
         _c0CaseService = c0CaseService;
         _settingsService = settingsService;
         _azureDevOpsService = azureDevOpsService;
+        InitStatusFilters();
     }
 
     public IGitService GitService => _gitService;
@@ -108,11 +109,27 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _multiCommitLabel = string.Empty;
 
+    [ObservableProperty]
+    private string _messageFilterText = string.Empty;
+
+    [ObservableProperty]
+    private string _filePathFilterText = string.Empty;
+
+    [ObservableProperty]
+    private ObservableCollection<SelectableCommitter> _statusFilters = [];
+
+    [ObservableProperty]
+    private string _statusFilterLabel = "Status(All)";
+
     public bool IsMultiCommitMode => _multiCommitMode;
     public bool HasBaseCommit => BaseCommit != null;
     public bool HasTargetCommit => TargetCommit != null;
 
     partial void OnCommitterFilterTextChanged(string value) => UpdateFilteredCommitters();
+
+    partial void OnMessageFilterTextChanged(string value) => ApplyFilters();
+
+    partial void OnFilePathFilterTextChanged(string value) => ApplyDiffFileFilters();
 
     partial void OnDateFromChanged(DateTime? value)
     {
@@ -246,7 +263,7 @@ public partial class MainViewModel : ObservableObject
             MultiCommitLabel = string.Empty;
             _allDiffFiles = files.ToList();
             BuildFolderTree(_allDiffFiles);
-            ApplyFolderFilter();
+            ApplyDiffFileFilters();
 
             StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件";
         }
@@ -292,7 +309,7 @@ public partial class MainViewModel : ObservableObject
 
             _allDiffFiles = files.ToList();
             BuildFolderTree(_allDiffFiles);
-            ApplyFolderFilter();
+            ApplyDiffFileFilters();
 
             StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件 ({hashes.Count} commits)";
         }
@@ -347,7 +364,7 @@ public partial class MainViewModel : ObservableObject
 
             _allDiffFiles = files.ToList();
             BuildFolderTree(_allDiffFiles);
-            ApplyFolderFilter();
+            ApplyDiffFileFilters();
 
             StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件 ({hashes.Count} commits)";
         }
@@ -610,23 +627,39 @@ public partial class MainViewModel : ObservableObject
             node.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(FolderTreeNode.IsSelected) && !_suppressFolderFilter)
-                    ApplyFolderFilter();
+                    ApplyDiffFileFilters();
             };
             SubscribeToTreeNodes(node.Children);
         }
     }
 
-    private void ApplyFolderFilter()
+    private void ApplyDiffFileFilters()
     {
         var filtered = _allDiffFiles.Where(f =>
         {
             var lastSlash = f.FilePath.LastIndexOf('/');
             var folderPath = lastSlash < 0 ? RootFolderKey : f.FilePath[..lastSlash];
             return IsFolderSelected(folderPath);
-        }).ToList();
+        });
 
-        DiffFiles = new ObservableCollection<DiffFileInfo>(filtered);
-        DiffFileCount = filtered.Count;
+        if (!string.IsNullOrWhiteSpace(FilePathFilterText))
+        {
+            var text = FilePathFilterText;
+            filtered = filtered.Where(f => f.FilePath.Contains(text, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var statusTotal = StatusFilters.Count;
+        var statusSelected = StatusFilters.Count(s => s.IsSelected);
+        if (statusSelected > 0 && statusSelected < statusTotal)
+        {
+            var selectedNames = new HashSet<string>(
+                StatusFilters.Where(s => s.IsSelected).Select(s => s.Name));
+            filtered = filtered.Where(f => selectedNames.Contains(f.StatusText));
+        }
+
+        var result = filtered.ToList();
+        DiffFiles = new ObservableCollection<DiffFileInfo>(result);
+        DiffFileCount = result.Count;
     }
 
     private bool IsFolderSelected(string folderPath)
@@ -643,7 +676,7 @@ public partial class MainViewModel : ObservableObject
         foreach (var node in FolderTree)
             node.IsSelected = true;
         _suppressFolderFilter = false;
-        ApplyFolderFilter();
+        ApplyDiffFileFilters();
     }
 
     [RelayCommand]
@@ -653,7 +686,7 @@ public partial class MainViewModel : ObservableObject
         foreach (var node in FolderTree)
             node.IsSelected = false;
         _suppressFolderFilter = false;
-        ApplyFolderFilter();
+        ApplyDiffFileFilters();
     }
 
     private void UpdateCompareCommitters()
@@ -746,7 +779,7 @@ public partial class MainViewModel : ObservableObject
 
             _allDiffFiles = files.ToList();
             BuildFolderTree(_allDiffFiles);
-            ApplyFolderFilter();
+            ApplyDiffFileFilters();
 
             StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件 ({hashes.Count} commits)";
         }
@@ -758,6 +791,44 @@ public partial class MainViewModel : ObservableObject
         {
             IsLoading = false;
         }
+    }
+
+    private void InitStatusFilters()
+    {
+        var names = new[] { "Added", "Modified", "Deleted", "Renamed", "Copied" };
+        var items = names.Select(n => new SelectableCommitter { Name = n }).ToList();
+        foreach (var item in items)
+        {
+            item.PropertyChanged += (_, _) =>
+            {
+                UpdateStatusFilterLabel();
+                ApplyDiffFileFilters();
+            };
+        }
+        StatusFilters = new ObservableCollection<SelectableCommitter>(items);
+    }
+
+    private void UpdateStatusFilterLabel()
+    {
+        var total = StatusFilters.Count;
+        var selected = StatusFilters.Count(s => s.IsSelected);
+        StatusFilterLabel = selected == 0 || selected == total
+            ? "Status(All)"
+            : $"Status({selected}/{total})";
+    }
+
+    [RelayCommand]
+    private void SelectAllStatusFilters()
+    {
+        foreach (var s in StatusFilters)
+            s.IsSelected = true;
+    }
+
+    [RelayCommand]
+    private void ClearAllStatusFilters()
+    {
+        foreach (var s in StatusFilters)
+            s.IsSelected = false;
     }
 
     [RelayCommand]
@@ -926,6 +997,12 @@ public partial class MainViewModel : ObservableObject
         if (DateTo is { } to)
         {
             filtered = filtered.Where(c => c.Date.LocalDateTime.Date <= to.Date);
+        }
+
+        if (!string.IsNullOrWhiteSpace(MessageFilterText))
+        {
+            var text = MessageFilterText;
+            filtered = filtered.Where(c => c.Message.Contains(text, StringComparison.OrdinalIgnoreCase));
         }
 
         Commits = new ObservableCollection<CommitInfo>(filtered);

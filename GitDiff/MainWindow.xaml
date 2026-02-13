@@ -45,95 +45,6 @@
                         Content="参照"
                         Style="{StaticResource MaterialDesignFlatButton}"
                         Padding="8,4" Height="28" />
-                <Separator />
-                <materialDesign:PopupBox StaysOpen="True"
-                                         PlacementMode="BottomAndAlignLeftEdges"
-                                         ToolTip="Committerフィルター"
-                                         materialDesign:ElevationAssist.Elevation="Dp0">
-                    <materialDesign:PopupBox.ToggleContent>
-                        <Border BorderBrush="{DynamicResource MaterialDesign.Brush.ForegroundLight}"
-                                BorderThickness="1" CornerRadius="3" Padding="8,4">
-                            <StackPanel Orientation="Horizontal">
-                                <materialDesign:PackIcon Kind="AccountFilter" Width="16" Height="16"
-                                                         VerticalAlignment="Center" Margin="0,0,4,0"
-                                                         Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
-                                <TextBlock Text="{Binding CommitterFilterLabel}"
-                                           VerticalAlignment="Center" FontSize="12"
-                                           Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
-                                <materialDesign:PackIcon Kind="ChevronDown" Width="14" Height="14"
-                                                         VerticalAlignment="Center" Margin="4,0,0,0"
-                                                         Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
-                            </StackPanel>
-                        </Border>
-                    </materialDesign:PopupBox.ToggleContent>
-                    <StackPanel MinWidth="220" Margin="8">
-                        <TextBox Text="{Binding CommitterFilterText, UpdateSourceTrigger=PropertyChanged}"
-                                 materialDesign:HintAssist.Hint="フィルタ..."
-                                 materialDesign:TextFieldAssist.HasClearButton="True"
-                                 Margin="0,0,0,4" FontSize="12" />
-                        <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
-                            <ItemsControl ItemsSource="{Binding FilteredCommitters}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <CheckBox Content="{Binding Name}"
-                                                  IsChecked="{Binding IsSelected}"
-                                                  Margin="0,2" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
-                        <Separator Margin="0,6" />
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button Content="すべて選択"
-                                    Command="{Binding SelectAllCommittersCommand}"
-                                    Style="{StaticResource MaterialDesignFlatButton}"
-                                    Padding="8,2" Height="26" FontSize="11" />
-                            <Button Content="クリア"
-                                    Command="{Binding ClearAllCommittersCommand}"
-                                    Style="{StaticResource MaterialDesignFlatButton}"
-                                    Padding="8,2" Height="26" FontSize="11" />
-                        </StackPanel>
-                    </StackPanel>
-                </materialDesign:PopupBox>
-                <materialDesign:PopupBox StaysOpen="True"
-                                         PlacementMode="BottomAndAlignLeftEdges"
-                                         ToolTip="日付フィルター"
-                                         materialDesign:ElevationAssist.Elevation="Dp0">
-                    <materialDesign:PopupBox.ToggleContent>
-                        <Border BorderBrush="{DynamicResource MaterialDesign.Brush.ForegroundLight}"
-                                BorderThickness="1" CornerRadius="3" Padding="8,4">
-                            <StackPanel Orientation="Horizontal">
-                                <materialDesign:PackIcon Kind="CalendarRange" Width="16" Height="16"
-                                                         VerticalAlignment="Center" Margin="0,0,4,0"
-                                                         Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
-                                <TextBlock Text="{Binding DateFilterLabel}"
-                                           VerticalAlignment="Center" FontSize="12"
-                                           Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
-                                <materialDesign:PackIcon Kind="ChevronDown" Width="14" Height="14"
-                                                         VerticalAlignment="Center" Margin="4,0,0,0"
-                                                         Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
-                            </StackPanel>
-                        </Border>
-                    </materialDesign:PopupBox.ToggleContent>
-                    <StackPanel MinWidth="220" Margin="8">
-                        <TextBlock Text="From" FontSize="11" Margin="0,0,0,2"
-                                   Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
-                        <DatePicker SelectedDate="{Binding DateFrom}"
-                                    materialDesign:HintAssist.Hint="開始日"
-                                    FontSize="12" Margin="0,0,0,8" />
-                        <TextBlock Text="To" FontSize="11" Margin="0,0,0,2"
-                                   Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
-                        <DatePicker SelectedDate="{Binding DateTo}"
-                                    materialDesign:HintAssist.Hint="終了日"
-                                    FontSize="12" Margin="0,0,0,4" />
-                        <Separator Margin="0,6" />
-                        <Button Content="クリア"
-                                Command="{Binding ClearDateFilterCommand}"
-                                Style="{StaticResource MaterialDesignFlatButton}"
-                                HorizontalAlignment="Right"
-                                Padding="8,2" Height="26" FontSize="11" />
-                    </StackPanel>
-                </materialDesign:PopupBox>
             </ToolBar>
         </ToolBarTray>
 
@@ -175,8 +86,110 @@
 
             <!-- Commits -->
             <DockPanel Grid.Row="0">
-                <TextBlock DockPanel.Dock="Top" Text="Commits" FontWeight="SemiBold" FontSize="12"
-                           Margin="4,2,4,2" />
+                <DockPanel DockPanel.Dock="Top" Margin="4,2,4,2">
+                    <!-- Date filter -->
+                    <materialDesign:PopupBox DockPanel.Dock="Right" StaysOpen="True"
+                                             PlacementMode="BottomAndAlignRightEdges"
+                                             ToolTip="日付フィルター"
+                                             materialDesign:ElevationAssist.Elevation="Dp0">
+                        <materialDesign:PopupBox.ToggleContent>
+                            <Border BorderBrush="{DynamicResource MaterialDesign.Brush.ForegroundLight}"
+                                    BorderThickness="1" CornerRadius="3" Padding="6,2">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="CalendarRange" Width="14" Height="14"
+                                                             VerticalAlignment="Center" Margin="0,0,4,0"
+                                                             Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
+                                    <TextBlock Text="{Binding DateFilterLabel}"
+                                               VerticalAlignment="Center" FontSize="11"
+                                               Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
+                                    <materialDesign:PackIcon Kind="ChevronDown" Width="12" Height="12"
+                                                             VerticalAlignment="Center" Margin="4,0,0,0"
+                                                             Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
+                                </StackPanel>
+                            </Border>
+                        </materialDesign:PopupBox.ToggleContent>
+                        <StackPanel MinWidth="220" Margin="8">
+                            <TextBlock Text="From" FontSize="11" Margin="0,0,0,2"
+                                       Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
+                            <DatePicker SelectedDate="{Binding DateFrom}"
+                                        materialDesign:HintAssist.Hint="開始日"
+                                        FontSize="12" Margin="0,0,0,8" />
+                            <TextBlock Text="To" FontSize="11" Margin="0,0,0,2"
+                                       Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
+                            <DatePicker SelectedDate="{Binding DateTo}"
+                                        materialDesign:HintAssist.Hint="終了日"
+                                        FontSize="12" Margin="0,0,0,4" />
+                            <Separator Margin="0,6" />
+                            <Button Content="クリア"
+                                    Command="{Binding ClearDateFilterCommand}"
+                                    Style="{StaticResource MaterialDesignFlatButton}"
+                                    HorizontalAlignment="Right"
+                                    Padding="8,2" Height="26" FontSize="11" />
+                        </StackPanel>
+                    </materialDesign:PopupBox>
+                    <!-- Committer filter -->
+                    <materialDesign:PopupBox DockPanel.Dock="Right" StaysOpen="True"
+                                             PlacementMode="BottomAndAlignRightEdges"
+                                             ToolTip="Committerフィルター"
+                                             Margin="4,0,0,0"
+                                             materialDesign:ElevationAssist.Elevation="Dp0">
+                        <materialDesign:PopupBox.ToggleContent>
+                            <Border BorderBrush="{DynamicResource MaterialDesign.Brush.ForegroundLight}"
+                                    BorderThickness="1" CornerRadius="3" Padding="6,2">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="AccountFilter" Width="14" Height="14"
+                                                             VerticalAlignment="Center" Margin="0,0,4,0"
+                                                             Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
+                                    <TextBlock Text="{Binding CommitterFilterLabel}"
+                                               VerticalAlignment="Center" FontSize="11"
+                                               Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
+                                    <materialDesign:PackIcon Kind="ChevronDown" Width="12" Height="12"
+                                                             VerticalAlignment="Center" Margin="4,0,0,0"
+                                                             Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
+                                </StackPanel>
+                            </Border>
+                        </materialDesign:PopupBox.ToggleContent>
+                        <StackPanel MinWidth="220" Margin="8">
+                            <TextBox Text="{Binding CommitterFilterText, UpdateSourceTrigger=PropertyChanged}"
+                                     materialDesign:HintAssist.Hint="フィルタ..."
+                                     materialDesign:TextFieldAssist.HasClearButton="True"
+                                     Margin="0,0,0,4" FontSize="12" />
+                            <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding FilteredCommitters}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox Content="{Binding Name}"
+                                                      IsChecked="{Binding IsSelected}"
+                                                      Margin="0,2" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                            <Separator Margin="0,6" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="すべて選択"
+                                        Command="{Binding SelectAllCommittersCommand}"
+                                        Style="{StaticResource MaterialDesignFlatButton}"
+                                        Padding="8,2" Height="26" FontSize="11" />
+                                <Button Content="クリア"
+                                        Command="{Binding ClearAllCommittersCommand}"
+                                        Style="{StaticResource MaterialDesignFlatButton}"
+                                        Padding="8,2" Height="26" FontSize="11" />
+                            </StackPanel>
+                        </StackPanel>
+                    </materialDesign:PopupBox>
+                    <!-- Message filter -->
+                    <TextBox DockPanel.Dock="Right"
+                             Text="{Binding MessageFilterText, UpdateSourceTrigger=PropertyChanged}"
+                             materialDesign:HintAssist.Hint="Message"
+                             materialDesign:TextFieldAssist.HasClearButton="True"
+                             Width="180"
+                             VerticalAlignment="Center"
+                             Margin="4,0,0,0"
+                             FontSize="11" />
+                    <TextBlock Text="Commits" FontWeight="SemiBold" FontSize="12"
+                               VerticalAlignment="Center" />
+                </DockPanel>
                 <DataGrid x:Name="CommitsGrid"
                           ItemsSource="{Binding Commits}"
                           AutoGenerateColumns="False"
@@ -368,62 +381,117 @@
                                   Margin="8,0,0,0"
                                   FontSize="12"
                                   ToolTip="マージコミットを差分検出から除外します" />
-                        <materialDesign:PopupBox DockPanel.Dock="Right"
-                                                 PlacementMode="BottomAndAlignRightEdges"
-                                                 StaysOpen="True"
-                                                 Margin="8,0,0,0"
-                                                 Height="30"
-                                                 ToolTip="Compare時のCommitterフィルター"
-                                                 materialDesign:ElevationAssist.Elevation="Dp0">
-                            <materialDesign:PopupBox.ToggleContent>
-                                <Border BorderBrush="{DynamicResource MaterialDesign.Brush.ForegroundLight}"
-                                        BorderThickness="1" CornerRadius="3" Padding="8,4">
-                                    <StackPanel Orientation="Horizontal">
-                                        <materialDesign:PackIcon Kind="AccountFilter" Width="16" Height="16"
-                                                                 VerticalAlignment="Center" Margin="0,0,4,0"
-                                                                 Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
-                                        <TextBlock Text="{Binding CompareCommitterLabel}"
-                                                   VerticalAlignment="Center" FontSize="12"
-                                                   Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
-                                        <materialDesign:PackIcon Kind="ChevronDown" Width="14" Height="14"
-                                                                 VerticalAlignment="Center" Margin="4,0,0,0"
-                                                                 Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
-                                    </StackPanel>
-                                </Border>
-                            </materialDesign:PopupBox.ToggleContent>
-                            <StackPanel MinWidth="200" Margin="8">
-                                <ItemsControl ItemsSource="{Binding CompareCommitters}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <CheckBox Content="{Binding Name}"
-                                                      IsChecked="{Binding IsSelected}"
-                                                      Margin="0,2" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <Separator Margin="0,6" />
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                    <Button Content="すべて選択"
-                                            Command="{Binding SelectAllCompareCommittersCommand}"
-                                            Style="{StaticResource MaterialDesignFlatButton}"
-                                            Padding="8,2" Height="26" FontSize="11" />
-                                    <Button Content="クリア"
-                                            Command="{Binding ClearAllCompareCommittersCommand}"
-                                            Style="{StaticResource MaterialDesignFlatButton}"
-                                            Padding="8,2" Height="26" FontSize="11" />
-                                </StackPanel>
-                            </StackPanel>
-                        </materialDesign:PopupBox>
                         <TextBlock />
                     </DockPanel>
                 </StackPanel>
 
                 <!-- Diff Files -->
                 <DockPanel>
-                <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" FontSize="12" Margin="4,2,4,2">
-                    <Run Text="Diff Files" />
-                    <Run Text="{Binding DiffFileCount, StringFormat='({0})'}" />
-                </TextBlock>
+                <DockPanel DockPanel.Dock="Top" Margin="4,2,4,2">
+                    <!-- Compare Committer filter -->
+                    <materialDesign:PopupBox DockPanel.Dock="Right"
+                                             PlacementMode="BottomAndAlignRightEdges"
+                                             StaysOpen="True"
+                                             ToolTip="Compare時のCommitterフィルター"
+                                             materialDesign:ElevationAssist.Elevation="Dp0">
+                        <materialDesign:PopupBox.ToggleContent>
+                            <Border BorderBrush="{DynamicResource MaterialDesign.Brush.ForegroundLight}"
+                                    BorderThickness="1" CornerRadius="3" Padding="6,2">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="AccountFilter" Width="14" Height="14"
+                                                             VerticalAlignment="Center" Margin="0,0,4,0"
+                                                             Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
+                                    <TextBlock Text="{Binding CompareCommitterLabel}"
+                                               VerticalAlignment="Center" FontSize="11"
+                                               Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
+                                    <materialDesign:PackIcon Kind="ChevronDown" Width="12" Height="12"
+                                                             VerticalAlignment="Center" Margin="4,0,0,0"
+                                                             Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
+                                </StackPanel>
+                            </Border>
+                        </materialDesign:PopupBox.ToggleContent>
+                        <StackPanel MinWidth="200" Margin="8">
+                            <ItemsControl ItemsSource="{Binding CompareCommitters}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Content="{Binding Name}"
+                                                  IsChecked="{Binding IsSelected}"
+                                                  Margin="0,2" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Separator Margin="0,6" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="すべて選択"
+                                        Command="{Binding SelectAllCompareCommittersCommand}"
+                                        Style="{StaticResource MaterialDesignFlatButton}"
+                                        Padding="8,2" Height="26" FontSize="11" />
+                                <Button Content="クリア"
+                                        Command="{Binding ClearAllCompareCommittersCommand}"
+                                        Style="{StaticResource MaterialDesignFlatButton}"
+                                        Padding="8,2" Height="26" FontSize="11" />
+                            </StackPanel>
+                        </StackPanel>
+                    </materialDesign:PopupBox>
+                    <!-- FilePath filter -->
+                    <TextBox DockPanel.Dock="Right"
+                             Text="{Binding FilePathFilterText, UpdateSourceTrigger=PropertyChanged}"
+                             materialDesign:HintAssist.Hint="FilePath"
+                             materialDesign:TextFieldAssist.HasClearButton="True"
+                             Width="180"
+                             VerticalAlignment="Center"
+                             Margin="4,0,0,0"
+                             FontSize="11" />
+                    <!-- Status filter -->
+                    <materialDesign:PopupBox DockPanel.Dock="Right" StaysOpen="True"
+                                             PlacementMode="BottomAndAlignRightEdges"
+                                             ToolTip="Statusフィルター"
+                                             Margin="4,0,0,0"
+                                             materialDesign:ElevationAssist.Elevation="Dp0">
+                        <materialDesign:PopupBox.ToggleContent>
+                            <Border BorderBrush="{DynamicResource MaterialDesign.Brush.ForegroundLight}"
+                                    BorderThickness="1" CornerRadius="3" Padding="6,2">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="FilterVariant" Width="14" Height="14"
+                                                             VerticalAlignment="Center" Margin="0,0,4,0"
+                                                             Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
+                                    <TextBlock Text="{Binding StatusFilterLabel}"
+                                               VerticalAlignment="Center" FontSize="11"
+                                               Foreground="{DynamicResource MaterialDesign.Brush.Foreground}" />
+                                    <materialDesign:PackIcon Kind="ChevronDown" Width="12" Height="12"
+                                                             VerticalAlignment="Center" Margin="4,0,0,0"
+                                                             Foreground="{DynamicResource MaterialDesign.Brush.ForegroundLight}" />
+                                </StackPanel>
+                            </Border>
+                        </materialDesign:PopupBox.ToggleContent>
+                        <StackPanel MinWidth="160" Margin="8">
+                            <ItemsControl ItemsSource="{Binding StatusFilters}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Content="{Binding Name}"
+                                                  IsChecked="{Binding IsSelected}"
+                                                  Margin="0,2" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Separator Margin="0,6" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="すべて選択"
+                                        Command="{Binding SelectAllStatusFiltersCommand}"
+                                        Style="{StaticResource MaterialDesignFlatButton}"
+                                        Padding="8,2" Height="26" FontSize="11" />
+                                <Button Content="クリア"
+                                        Command="{Binding ClearAllStatusFiltersCommand}"
+                                        Style="{StaticResource MaterialDesignFlatButton}"
+                                        Padding="8,2" Height="26" FontSize="11" />
+                            </StackPanel>
+                        </StackPanel>
+                    </materialDesign:PopupBox>
+                    <TextBlock FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center">
+                        <Run Text="Diff Files" />
+                        <Run Text="{Binding DiffFileCount, StringFormat='({0})'}" />
+                    </TextBlock>
+                </DockPanel>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="220" MinWidth="120" />
