@@ -16,6 +16,10 @@ public partial class DiffViewerWindow : Window
     private ScrollViewer? _rightScrollViewer;
     private bool _isSyncingScroll;
 
+    // Change navigation state
+    private List<int> _changeGroupIndices = [];
+    private int _currentChangeGroupIndex = -1;
+
     // Drag selection state
     private ListView? _dragListView;
     private int _dragStartIndex = -1;
@@ -32,7 +36,11 @@ public partial class DiffViewerWindow : Window
                 case nameof(DiffViewerViewModel.DiffLines):
                 case nameof(DiffViewerViewModel.SideBySideLines):
                 case nameof(DiffViewerViewModel.IsSideBySideMode):
-                    Dispatcher.BeginInvoke(DispatcherPriority.Loaded, ScrollToFirstChange);
+                    Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+                    {
+                        BuildChangeGroupIndices();
+                        NavigateToNextChange();
+                    });
                     break;
             }
         };
@@ -98,41 +106,124 @@ public partial class DiffViewerWindow : Window
         }
     }
 
-    private void ScrollToFirstChange()
+    private void UpdateChangeCountDisplay()
     {
+        if (_changeGroupIndices.Count == 0)
+        {
+            ChangeCountText.Text = "";
+            return;
+        }
+        ChangeCountText.Text = $"{_currentChangeGroupIndex + 1}/{_changeGroupIndices.Count}";
+    }
+
+    private void BuildChangeGroupIndices()
+    {
+        _changeGroupIndices.Clear();
+        _currentChangeGroupIndex = -1;
+        UpdateChangeCountDisplay();
+
         if (DataContext is not DiffViewerViewModel vm) return;
 
         if (vm.IsSideBySideMode)
         {
-            var firstChange = vm.SideBySideLines.FirstOrDefault(l =>
-                l.LeftType is DiffLineType.Added or DiffLineType.Deleted ||
-                l.RightType is DiffLineType.Added or DiffLineType.Deleted);
-            if (firstChange != null)
-                ScrollToCenter(RightDiffList, firstChange);
+            var lines = vm.SideBySideLines;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                bool isChange = lines[i].LeftType is DiffLineType.Added or DiffLineType.Deleted
+                             || lines[i].RightType is DiffLineType.Added or DiffLineType.Deleted;
+                if (!isChange) continue;
+
+                bool prevIsChange = i > 0
+                    && (lines[i - 1].LeftType is DiffLineType.Added or DiffLineType.Deleted
+                     || lines[i - 1].RightType is DiffLineType.Added or DiffLineType.Deleted);
+                if (!prevIsChange)
+                    _changeGroupIndices.Add(i);
+            }
         }
         else
         {
-            var firstChange = vm.DiffLines.FirstOrDefault(l =>
-                l.Type is DiffLineType.Added or DiffLineType.Deleted);
-            if (firstChange != null)
-                ScrollToCenter(UnifiedDiffList, firstChange);
+            var lines = vm.DiffLines;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                bool isChange = lines[i].Type is DiffLineType.Added or DiffLineType.Deleted;
+                if (!isChange) continue;
+
+                bool prevIsChange = i > 0
+                    && lines[i - 1].Type is DiffLineType.Added or DiffLineType.Deleted;
+                if (!prevIsChange)
+                    _changeGroupIndices.Add(i);
+            }
         }
+    }
+
+    private void NavigateToNextChange()
+    {
+        if (_changeGroupIndices.Count == 0) return;
+
+        if (_currentChangeGroupIndex < _changeGroupIndices.Count - 1)
+            _currentChangeGroupIndex++;
+
+        ScrollToChangeGroup(_currentChangeGroupIndex);
+    }
+
+    private void NavigateToPreviousChange()
+    {
+        if (_changeGroupIndices.Count == 0) return;
+
+        if (_currentChangeGroupIndex > 0)
+            _currentChangeGroupIndex--;
+
+        ScrollToChangeGroup(_currentChangeGroupIndex);
+    }
+
+    private void ScrollToChangeGroup(int groupIndex)
+    {
+        if (groupIndex < 0 || groupIndex >= _changeGroupIndices.Count) return;
+        if (DataContext is not DiffViewerViewModel vm) return;
+
+        UpdateChangeCountDisplay();
+
+        var itemIndex = _changeGroupIndices[groupIndex];
+
+        if (vm.IsSideBySideMode)
+        {
+            if (itemIndex < vm.SideBySideLines.Count)
+                ScrollToCenter(RightDiffList, vm.SideBySideLines[itemIndex]);
+        }
+        else
+        {
+            if (itemIndex < vm.DiffLines.Count)
+                ScrollToCenter(UnifiedDiffList, vm.DiffLines[itemIndex]);
+        }
+    }
+
+    private void OnPrevChangeClick(object sender, RoutedEventArgs e)
+    {
+        NavigateToPreviousChange();
+    }
+
+    private void OnNextChangeClick(object sender, RoutedEventArgs e)
+    {
+        NavigateToNextChange();
     }
 
     private void ScrollToCenter(ListView listView, object item)
     {
+        var scrollViewer = GetScrollViewer(listView);
+        var savedHorizontal = scrollViewer?.HorizontalOffset ?? 0;
+
         // まずScrollIntoViewでコンテナを実体化させる（仮想化対策）
         listView.ScrollIntoView(item);
         listView.UpdateLayout();
 
         var container = listView.ItemContainerGenerator.ContainerFromItem(item) as FrameworkElement;
-        var scrollViewer = GetScrollViewer(listView);
         if (container == null || scrollViewer == null) return;
 
         var itemTop = container.TranslatePoint(new Point(0, 0), scrollViewer).Y;
         var centerOffset = scrollViewer.VerticalOffset + itemTop
                            - (scrollViewer.ViewportHeight - container.ActualHeight) / 2;
         scrollViewer.ScrollToVerticalOffset(Math.Max(0, centerOffset));
+        scrollViewer.ScrollToHorizontalOffset(savedHorizontal);
     }
 
     private static ScrollViewer? GetScrollViewer(DependencyObject element)
