@@ -131,28 +131,6 @@ public class GitService : IGitService
         return result.Values.ToList();
     }
 
-    public IReadOnlyList<string> GetCommittersBetween(string repoPath, string baseCommitHash, string targetCommitHash)
-    {
-        using var repo = new Repository(repoPath);
-        var baseCommit = repo.Lookup<Commit>(baseCommitHash);
-        var targetCommit = repo.Lookup<Commit>(targetCommitHash);
-
-        if (baseCommit == null || targetCommit == null)
-            return [];
-
-        var filter = new CommitFilter
-        {
-            IncludeReachableFrom = targetCommit,
-            ExcludeReachableFrom = baseCommit
-        };
-
-        return repo.Commits.QueryBy(filter)
-            .Select(c => c.Author.Name)
-            .Distinct()
-            .OrderBy(name => name)
-            .ToList();
-    }
-
     public byte[]? GetFileContent(string repoPath, string commitHash, string filePath)
     {
         using var repo = new Repository(repoPath);
@@ -393,18 +371,6 @@ public class GitService : IGitService
     public IReadOnlyList<DiffFileInfo> GetDiffFilesForCommits(string repoPath, IReadOnlyList<string> commitHashes)
     {
         return GetDiffFilesForCommitsCore(repoPath, commitHashes, committerFilter: null);
-    }
-
-    public IReadOnlyList<string> GetCommittersForCommits(string repoPath, IReadOnlyList<string> commitHashes)
-    {
-        using var repo = new Repository(repoPath);
-        return commitHashes
-            .Select(h => repo.Lookup<Commit>(h))
-            .Where(c => c != null && c.Parents.Count() <= 1)
-            .Select(c => c!.Author.Name)
-            .Distinct()
-            .OrderBy(n => n)
-            .ToList();
     }
 
     private IReadOnlyList<DiffFileInfo> GetDiffFilesForCommitsCore(string repoPath, IReadOnlyList<string> commitHashes, IReadOnlyList<string>? committerFilter)

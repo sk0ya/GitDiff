@@ -251,6 +251,7 @@ public partial class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(IsMultiCommitMode));
             MultiCommitLabel = string.Empty;
             _allDiffFiles = files.ToList();
+            InitCommittersFromDiffFiles();
             BuildFolderTree(_allDiffFiles);
             ApplyDiffFileFilters();
 
@@ -294,9 +295,8 @@ public partial class MainViewModel : ObservableObject
             TargetCommit = null;
             MultiCommitLabel = "Multi: " + string.Join(", ", hashes);
 
-            InitMultiCommitCommitters(repoPath, hashes);
-
             _allDiffFiles = files.ToList();
+            InitCommittersFromDiffFiles();
             BuildFolderTree(_allDiffFiles);
             ApplyDiffFileFilters();
 
@@ -349,9 +349,8 @@ public partial class MainViewModel : ObservableObject
             TargetCommit = null;
             MultiCommitLabel = dialog.ResultLabel;
 
-            InitMultiCommitCommitters(repoPath, hashes);
-
             _allDiffFiles = files.ToList();
+            InitCommittersFromDiffFiles();
             BuildFolderTree(_allDiffFiles);
             ApplyDiffFileFilters();
 
@@ -696,23 +695,6 @@ public partial class MainViewModel : ObservableObject
             CompareCommitterLabel = "Committer(All)";
             return;
         }
-
-        try
-        {
-            var committers = _gitService.GetCommittersBetween(RepositoryPath, BaseCommit.Hash, TargetCommit.Hash);
-            var items = committers.Select(name => new SelectableCommitter { Name = name }).ToList();
-            foreach (var item in items)
-            {
-                item.PropertyChanged += (_, _) => UpdateCompareCommitterLabel();
-            }
-            CompareCommitters = new ObservableCollection<SelectableCommitter>(items);
-            UpdateCompareCommitterLabel();
-        }
-        catch
-        {
-            CompareCommitters = [];
-            CompareCommitterLabel = "Committer(All)";
-        }
     }
 
     private void UpdateCompareCommitterLabel()
@@ -727,24 +709,22 @@ public partial class MainViewModel : ObservableObject
         ApplyDiffFileFilters();
     }
 
-    private void InitMultiCommitCommitters(string repoPath, IReadOnlyList<string> hashes)
+    private void InitCommittersFromDiffFiles()
     {
-        try
+        var committers = _allDiffFiles
+            .Where(f => f.AuthorName != null)
+            .Select(f => f.AuthorName!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n)
+            .ToList();
+
+        var items = committers.Select(name => new SelectableCommitter { Name = name }).ToList();
+        foreach (var item in items)
         {
-            var committers = _gitService.GetCommittersForCommits(repoPath, hashes);
-            var items = committers.Select(name => new SelectableCommitter { Name = name }).ToList();
-            foreach (var item in items)
-            {
-                item.PropertyChanged += (_, _) => UpdateCompareCommitterLabel();
-            }
-            CompareCommitters = new ObservableCollection<SelectableCommitter>(items);
-            CompareCommitterLabel = "Committer(All)";
+            item.PropertyChanged += (_, _) => UpdateCompareCommitterLabel();
         }
-        catch
-        {
-            CompareCommitters = [];
-            CompareCommitterLabel = "Committer(All)";
-        }
+        CompareCommitters = new ObservableCollection<SelectableCommitter>(items);
+        CompareCommitterLabel = "Committer(All)";
     }
 
     private void InitStatusFilters()
