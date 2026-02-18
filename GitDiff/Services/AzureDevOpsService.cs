@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -12,6 +13,10 @@ public class AzureDevOpsService : IAzureDevOpsService
     {
         PropertyNameCaseInsensitive = true
     };
+
+    // PRが対象リポジトリに存在しないことが確認済みのID群をキャッシュ
+    // キー: "{org}\0{project}\0{repoName}" ごとに独立管理
+    private readonly Dictionary<string, ConcurrentDictionary<int, byte>> _notFoundPrCache = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task TestConnectionAsync(string org, string project, string pat)
     {
@@ -91,16 +96,28 @@ public class AzureDevOpsService : IAzureDevOpsService
         // Azure DevOps API の過負荷を避けるため同時接続数を制限
         using var semaphore = new SemaphoreSlim(5);
 
+        var cacheKey = $"{org}\0{project}\0{repoName}";
+        if (!_notFoundPrCache.TryGetValue(cacheKey, out var notFoundSet))
+        {
+            notFoundSet = new ConcurrentDictionary<int, byte>();
+            _notFoundPrCache[cacheKey] = notFoundSet;
+        }
+
         var tasks = pullRequestIds.Distinct().Select(prId =>
-            FetchSinglePrAsync(client, org, project, repoName, prId, semaphore));
+            FetchSinglePrAsync(client, org, project, repoName, prId, semaphore, notFoundSet));
 
         var results = await Task.WhenAll(tasks);
         return [.. results];
     }
 
     private static async Task<AzureDevOpsPullRequestInfo> FetchSinglePrAsync(
-        HttpClient client, string org, string project, string repoName, int prId, SemaphoreSlim semaphore)
+        HttpClient client, string org, string project, string repoName, int prId,
+        SemaphoreSlim semaphore, ConcurrentDictionary<int, byte> notFoundSet)
     {
+        // キャッシュ済みの「存在しないPR」はHTTPリクエストなしで即返す
+        if (notFoundSet.ContainsKey(prId))
+            return new AzureDevOpsPullRequestInfo { Id = prId, Title = $"PR #{prId}" };
+
         await semaphore.WaitAsync();
         try
         {
@@ -121,7 +138,11 @@ public class AzureDevOpsService : IAzureDevOpsService
                         ? titleEl.GetString() ?? $"PR #{prId}"
                         : $"PR #{prId}";
                 }
-                // else: PR not found in this repo — skip commit fetch
+                else
+                {
+                    // このリポジトリに存在しないPRとしてキャッシュ（次回以降スキップ）
+                    notFoundSet.TryAdd(prId, 0);
+                }
             }
             catch
             {
