@@ -384,7 +384,7 @@ public class GitService : IGitService
         {
             var commit = repo.Lookup<Commit>(hash);
             if (commit == null)
-                throw new ArgumentException($"コミットが見つかりません: {hash}");
+                continue; // このリポジトリに存在しないコミットはスキップ
             var parents = commit.Parents.ToList();
             if (parents.Count > 1)
                 continue; // Skip merge commits

@@ -94,46 +94,52 @@ public class AzureDevOpsService : IAzureDevOpsService
         {
             var pr = new AzureDevOpsPullRequestInfo { Id = prId };
 
-            // Get PR title
+            // Get PR title — also determines whether this PR exists in this repository
+            var prExistsInRepo = false;
             try
             {
                 var prUrl = $"https://dev.azure.com/{org}/{project}/_apis/git/repositories/{repoName}/pullrequests/{prId}?api-version=7.0";
                 var prResponse = await client.GetAsync(prUrl);
                 if (prResponse.IsSuccessStatusCode)
                 {
+                    prExistsInRepo = true;
                     var prJson = await prResponse.Content.ReadAsStringAsync();
                     var prDoc = JsonDocument.Parse(prJson);
                     pr.Title = prDoc.RootElement.TryGetProperty("title", out var titleEl)
                         ? titleEl.GetString() ?? $"PR #{prId}"
                         : $"PR #{prId}";
                 }
+                // else: PR not found in this repo — skip commit fetch
             }
             catch
             {
                 pr.Title = $"PR #{prId}";
             }
 
-            // Get PR commits
-            try
+            // Get PR commits — only when the PR exists in this repository
+            if (prExistsInRepo)
             {
-                var commitsUrl = $"https://dev.azure.com/{org}/{project}/_apis/git/repositories/{repoName}/pullrequests/{prId}/commits?api-version=7.0";
-                var commitsResponse = await client.GetAsync(commitsUrl);
-                if (commitsResponse.IsSuccessStatusCode)
+                try
                 {
-                    var commitsJson = await commitsResponse.Content.ReadAsStringAsync();
-                    var commitsDoc = JsonDocument.Parse(commitsJson);
-
-                    foreach (var commit in commitsDoc.RootElement.GetProperty("value").EnumerateArray())
+                    var commitsUrl = $"https://dev.azure.com/{org}/{project}/_apis/git/repositories/{repoName}/pullrequests/{prId}/commits?api-version=7.0";
+                    var commitsResponse = await client.GetAsync(commitsUrl);
+                    if (commitsResponse.IsSuccessStatusCode)
                     {
-                        var commitId = commit.GetProperty("commitId").GetString();
-                        if (!string.IsNullOrEmpty(commitId))
-                            pr.CommitHashes.Add(commitId);
+                        var commitsJson = await commitsResponse.Content.ReadAsStringAsync();
+                        var commitsDoc = JsonDocument.Parse(commitsJson);
+
+                        foreach (var commit in commitsDoc.RootElement.GetProperty("value").EnumerateArray())
+                        {
+                            var commitId = commit.GetProperty("commitId").GetString();
+                            if (!string.IsNullOrEmpty(commitId))
+                                pr.CommitHashes.Add(commitId);
+                        }
                     }
                 }
-            }
-            catch
-            {
-                // Skip commits fetch error for this PR
+                catch
+                {
+                    // Skip commits fetch error for this PR
+                }
             }
 
             result.Add(pr);
