@@ -6,6 +6,5 @@ public class AppSettings
     public List<string> RecentRepositories { get; set; } = [];
     public string? AzureDevOpsOrganization { get; set; }
     public string? AzureDevOpsProject { get; set; }
-    public string? AzureDevOpsRepository { get; set; }
     public string? AzureDevOpsCredentialTarget { get; set; }
 }

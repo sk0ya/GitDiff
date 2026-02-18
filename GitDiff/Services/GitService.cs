@@ -474,4 +474,11 @@ public class GitService : IGitService
         ChangeKind.Copied => ChangeStatus.Copied,
         _ => ChangeStatus.Modified
     };
+
+    public string? GetRemoteUrl(string repoPath)
+    {
+        using var repo = new Repository(repoPath);
+        var remote = repo.Network.Remotes["origin"];
+        return remote?.Url;
+    }
 }

@@ -36,7 +36,6 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Organization:"
@@ -51,18 +50,12 @@
                          materialDesign:HintAssist.Hint="MyProject"
                          FontSize="12" Margin="0,0,0,6" />
 
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="Repository:"
-                           VerticalAlignment="Center" FontSize="12" Margin="0,0,8,6" />
-                <TextBox Grid.Row="2" Grid.Column="1" x:Name="RepoInput"
-                         materialDesign:HintAssist.Hint="MyRepo"
-                         FontSize="12" Margin="0,0,0,6" />
-
-                <TextBlock Grid.Row="3" Grid.Column="0" Text="Credential:"
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Credential:"
                            VerticalAlignment="Center" FontSize="12" Margin="0,0,8,0" />
-                <TextBox Grid.Row="3" Grid.Column="1" x:Name="CredentialTargetInput"
+                <TextBox Grid.Row="2" Grid.Column="1" x:Name="CredentialTargetInput"
                          materialDesign:HintAssist.Hint="git:https://dev.azure.com/myorg"
                          FontSize="12" />
-                <Button Grid.Row="3" Grid.Column="2" Content="Test"
+                <Button Grid.Row="2" Grid.Column="2" Content="Test"
                         Click="TestConnection_Click"
                         Style="{StaticResource MaterialDesignFlatButton}"
                         Height="28" Padding="8,2" Margin="4,0,0,0"

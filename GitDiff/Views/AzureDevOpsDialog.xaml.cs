@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -11,17 +12,22 @@ public partial class AzureDevOpsDialog : Window
 {
     private readonly IAzureDevOpsService _azureService;
     private readonly ISettingsService _settingsService;
+    private readonly IGitService _gitService;
+    private readonly string _repositoryPath;
     private List<AzureDevOpsWorkItem> _workItems = [];
     private Dictionary<int, AzureDevOpsPullRequestInfo> _pullRequests = new();
 
     public List<string> ResultCommitHashes { get; private set; } = [];
     public string ResultLabel { get; private set; } = string.Empty;
 
-    public AzureDevOpsDialog(IAzureDevOpsService azureService, ISettingsService settingsService)
+    public AzureDevOpsDialog(IAzureDevOpsService azureService, ISettingsService settingsService,
+        IGitService gitService, string repositoryPath)
     {
         InitializeComponent();
         _azureService = azureService;
         _settingsService = settingsService;
+        _gitService = gitService;
+        _repositoryPath = repositoryPath;
         LoadSettings();
     }
 
@@ -30,13 +36,11 @@ public partial class AzureDevOpsDialog : Window
         var settings = _settingsService.Load();
         OrgInput.Text = settings.AzureDevOpsOrganization ?? string.Empty;
         ProjectInput.Text = settings.AzureDevOpsProject ?? string.Empty;
-        RepoInput.Text = settings.AzureDevOpsRepository ?? string.Empty;
         CredentialTargetInput.Text = settings.AzureDevOpsCredentialTarget ?? string.Empty;
 
         // Expand settings if not configured
         SettingsExpander.IsExpanded = string.IsNullOrWhiteSpace(OrgInput.Text)
             || string.IsNullOrWhiteSpace(ProjectInput.Text)
-            || string.IsNullOrWhiteSpace(RepoInput.Text)
             || string.IsNullOrWhiteSpace(CredentialTargetInput.Text);
     }
 
@@ -45,7 +49,6 @@ public partial class AzureDevOpsDialog : Window
         var settings = _settingsService.Load();
         settings.AzureDevOpsOrganization = OrgInput.Text.Trim();
         settings.AzureDevOpsProject = ProjectInput.Text.Trim();
-        settings.AzureDevOpsRepository = RepoInput.Text.Trim();
         settings.AzureDevOpsCredentialTarget = CredentialTargetInput.Text.Trim();
         _settingsService.Save(settings);
     }
@@ -106,11 +109,10 @@ public partial class AzureDevOpsDialog : Window
         SaveSettings();
         var org = OrgInput.Text.Trim();
         var project = ProjectInput.Text.Trim();
-        var repoName = RepoInput.Text.Trim();
 
-        if (string.IsNullOrEmpty(org) || string.IsNullOrEmpty(project) || string.IsNullOrEmpty(repoName))
+        if (string.IsNullOrEmpty(org) || string.IsNullOrEmpty(project))
         {
-            SetStatus("Settings の Organization, Project, Repository を入力してください。");
+            SetStatus("Settings の Organization, Project を入力してください。");
             SettingsExpander.IsExpanded = true;
             return;
         }
@@ -164,7 +166,21 @@ public partial class AzureDevOpsDialog : Window
             SetStatus($"PR を取得中... ({allPrIds.Count} 件)");
 
             // 4. Fetch PR details and commits
-            var prs = await _azureService.GetPullRequestsWithCommitsAsync(org, project, repoName, pat, allPrIds);
+            // Use project/repo from current Git remote URL (handles cross-project WorkItem linkage)
+            var remoteUrl = _gitService.GetRemoteUrl(_repositoryPath);
+            var (parsedProject, parsedRepoName) = ParseAzureDevOpsRemoteUrl(remoteUrl);
+            var prProject = parsedProject ?? project;
+            var prRepoName = parsedRepoName;
+
+            if (string.IsNullOrEmpty(prRepoName))
+            {
+                SetStatus("リモートURLからリポジトリ名を取得できません。リポジトリのリモートURLを確認してください。");
+                BuildResultsTree();
+                SetLoading(false);
+                return;
+            }
+
+            var prs = await _azureService.GetPullRequestsWithCommitsAsync(org, prProject, prRepoName, pat, allPrIds);
             _pullRequests = prs.ToDictionary(p => p.Id);
 
             // 5. Build tree display
@@ -544,6 +560,24 @@ public partial class AzureDevOpsDialog : Window
     {
         SaveSettings();
         DialogResult = false;
+    }
+
+    private static (string? Project, string? RepoName) ParseAzureDevOpsRemoteUrl(string? remoteUrl)
+    {
+        if (string.IsNullOrEmpty(remoteUrl)) return (null, null);
+
+        // https://dev.azure.com/{org}/{project}/_git/{repoName}
+        // https://{user}@dev.azure.com/{org}/{project}/_git/{repoName}
+        var m = Regex.Match(remoteUrl, @"dev\.azure\.com/[^/]+/([^/]+)/_git/([^/?#]+)", RegexOptions.IgnoreCase);
+        if (m.Success)
+            return (Uri.UnescapeDataString(m.Groups[1].Value), Uri.UnescapeDataString(m.Groups[2].Value));
+
+        // https://{org}.visualstudio.com/{project}/_git/{repoName}
+        m = Regex.Match(remoteUrl, @"visualstudio\.com/([^/]+)/_git/([^/?#]+)", RegexOptions.IgnoreCase);
+        if (m.Success)
+            return (Uri.UnescapeDataString(m.Groups[1].Value), Uri.UnescapeDataString(m.Groups[2].Value));
+
+        return (null, null);
     }
 
     private void SetStatus(string message) => StatusText.Text = message;

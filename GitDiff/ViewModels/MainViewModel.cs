@@ -321,7 +321,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        var dialog = new AzureDevOpsDialog(_azureDevOpsService, _settingsService)
+        var dialog = new AzureDevOpsDialog(_azureDevOpsService, _settingsService, _gitService, RepositoryPath)
         {
             Owner = Application.Current.MainWindow
         };
