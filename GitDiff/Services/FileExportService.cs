@@ -12,11 +12,15 @@ public class FileExportService : IFileExportService
         _gitService = gitService;
     }
 
-    public int ExportDiffFiles(string repoPath, string baseCommitHash, string targetCommitHash, IEnumerable<DiffFileInfo> diffFiles, string outputPath)
+    public int ExportDiffFiles(string repoPath, string baseCommitHash, string targetCommitHash, IEnumerable<DiffFileInfo> diffFiles, string outputPath, string subFolder = "")
     {
         int exportedCount = 0;
-        var beforePath = Path.Combine(outputPath, "before");
-        var afterPath = Path.Combine(outputPath, "after");
+        var beforePath = string.IsNullOrEmpty(subFolder)
+            ? Path.Combine(outputPath, "before")
+            : Path.Combine(outputPath, "before", subFolder);
+        var afterPath = string.IsNullOrEmpty(subFolder)
+            ? Path.Combine(outputPath, "after")
+            : Path.Combine(outputPath, "after", subFolder);
 
         foreach (var file in diffFiles)
         {

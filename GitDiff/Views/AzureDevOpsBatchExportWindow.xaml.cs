@@ -555,12 +555,11 @@ public partial class AzureDevOpsBatchExportWindow : Window
 
                 if (diffFiles.Count == 0) continue;
 
-                var repoOutputPath = Path.Combine(outputPath, repoName);
                 SetStatus($"エクスポート中: {repoName} ({diffFiles.Count} ファイル)");
 
                 var count = await Task.Run(() =>
                     _fileExportService.ExportDiffFiles(
-                        repoPath, string.Empty, string.Empty, diffFiles, repoOutputPath));
+                        repoPath, string.Empty, string.Empty, diffFiles, outputPath, repoName));
 
                 totalExported += count;
                 repoCount++;
