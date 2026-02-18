@@ -320,6 +320,16 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void OpenAzureDevOpsBatchExport()
+    {
+        var window = new AzureDevOpsBatchExportWindow(_settingsService, _gitService, _fileExportService)
+        {
+            Owner = Application.Current.MainWindow
+        };
+        window.Show();
+    }
+
+    [RelayCommand]
     private async Task CompareAzureDevOpsPR()
     {
         if (string.IsNullOrWhiteSpace(RepositoryPath))

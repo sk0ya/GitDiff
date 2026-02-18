@@ -45,6 +45,15 @@
                         Content="参照"
                         Style="{StaticResource MaterialDesignFlatButton}"
                         Padding="8,4" Height="28" />
+                <Button Command="{Binding OpenAzureDevOpsBatchExportCommand}"
+                        Style="{StaticResource MaterialDesignFlatButton}"
+                        Padding="8,4" Height="28"
+                        ToolTip="AzureDevOpsから関連差分一括出力">
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="CloudDownload" Width="16" Height="16" Margin="0,0,4,0" />
+                        <TextBlock Text="Azure 一括出力" />
+                    </StackPanel>
+                </Button>
             </ToolBar>
         </ToolBarTray>
 
