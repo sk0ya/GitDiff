@@ -7,4 +7,5 @@ public class AppSettings
     public string? AzureDevOpsOrganization { get; set; }
     public string? AzureDevOpsProject { get; set; }
     public string? AzureDevOpsCredentialTarget { get; set; }
+    public List<string> BatchExportRepositories { get; set; } = [];
 }

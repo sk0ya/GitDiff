@@ -41,6 +41,9 @@ public partial class AzureDevOpsBatchExportWindow : Window
         ProjectInput.Text = settings.AzureDevOpsProject ?? string.Empty;
         CredentialTargetInput.Text = settings.AzureDevOpsCredentialTarget ?? string.Empty;
 
+        foreach (var path in settings.BatchExportRepositories)
+            RepositoriesListBox.Items.Add(path);
+
         SettingsExpander.IsExpanded = string.IsNullOrWhiteSpace(OrgInput.Text)
             || string.IsNullOrWhiteSpace(ProjectInput.Text)
             || string.IsNullOrWhiteSpace(CredentialTargetInput.Text);
@@ -52,6 +55,7 @@ public partial class AzureDevOpsBatchExportWindow : Window
         settings.AzureDevOpsOrganization = OrgInput.Text.Trim();
         settings.AzureDevOpsProject = ProjectInput.Text.Trim();
         settings.AzureDevOpsCredentialTarget = CredentialTargetInput.Text.Trim();
+        settings.BatchExportRepositories = GetRepositoryPaths();
         _settingsService.Save(settings);
     }
 
