@@ -87,10 +87,22 @@ public class AzureDevOpsService : IAzureDevOpsService
     public async Task<List<AzureDevOpsPullRequestInfo>> GetPullRequestsWithCommitsAsync(
         string org, string project, string repoName, string pat, IReadOnlyList<int> pullRequestIds)
     {
-        var result = new List<AzureDevOpsPullRequestInfo>();
         using var client = CreateClient(pat);
+        // Azure DevOps API の過負荷を避けるため同時接続数を制限
+        using var semaphore = new SemaphoreSlim(5);
 
-        foreach (var prId in pullRequestIds.Distinct())
+        var tasks = pullRequestIds.Distinct().Select(prId =>
+            FetchSinglePrAsync(client, org, project, repoName, prId, semaphore));
+
+        var results = await Task.WhenAll(tasks);
+        return [.. results];
+    }
+
+    private static async Task<AzureDevOpsPullRequestInfo> FetchSinglePrAsync(
+        HttpClient client, string org, string project, string repoName, int prId, SemaphoreSlim semaphore)
+    {
+        await semaphore.WaitAsync();
+        try
         {
             var pr = new AzureDevOpsPullRequestInfo { Id = prId };
 
@@ -142,10 +154,12 @@ public class AzureDevOpsService : IAzureDevOpsService
                 }
             }
 
-            result.Add(pr);
+            return pr;
         }
-
-        return result;
+        finally
+        {
+            semaphore.Release();
+        }
     }
 
     private static HttpClient CreateClient(string pat)
