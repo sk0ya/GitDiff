@@ -286,7 +286,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var repoPath = RepositoryPath;
-            var files = await Task.Run(() => _gitService.GetDiffFilesForCommits(repoPath, hashes));
+            var (files, notFoundHashes) = await Task.Run(() => _gitService.GetDiffFilesForCommits(repoPath, hashes));
 
             _multiCommitMode = true;
             _multiCommitHashes = hashes.ToList();
@@ -300,7 +300,14 @@ public partial class MainViewModel : ObservableObject
             BuildFolderTree(_allDiffFiles);
             ApplyDiffFileFilters();
 
-            StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件 ({hashes.Count} commits)";
+            if (notFoundHashes.Count > 0)
+            {
+                StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件 ({hashes.Count} commits) ※未検出: {string.Join(", ", notFoundHashes)}";
+            }
+            else
+            {
+                StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件 ({hashes.Count} commits)";
+            }
         }
         catch (Exception ex)
         {
@@ -340,7 +347,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var repoPath = RepositoryPath;
-            var files = await Task.Run(() => _gitService.GetDiffFilesForCommits(repoPath, hashes));
+            var (files, notFoundHashes) = await Task.Run(() => _gitService.GetDiffFilesForCommits(repoPath, hashes));
 
             _multiCommitMode = true;
             _multiCommitHashes = hashes.ToList();
@@ -354,7 +361,14 @@ public partial class MainViewModel : ObservableObject
             BuildFolderTree(_allDiffFiles);
             ApplyDiffFileFilters();
 
-            StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件 ({hashes.Count} commits)";
+            if (notFoundHashes.Count > 0)
+            {
+                StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件 ({hashes.Count} commits) ※未検出: {string.Join(", ", notFoundHashes)}";
+            }
+            else
+            {
+                StatusMessage = $"差分ファイル: {_allDiffFiles.Count} 件 ({hashes.Count} commits)";
+            }
         }
         catch (Exception ex)
         {

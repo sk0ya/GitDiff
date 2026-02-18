@@ -368,23 +368,27 @@ public class GitService : IGitService
         return result;
     }
 
-    public IReadOnlyList<DiffFileInfo> GetDiffFilesForCommits(string repoPath, IReadOnlyList<string> commitHashes)
+    public (IReadOnlyList<DiffFileInfo> Files, IReadOnlyList<string> NotFoundHashes) GetDiffFilesForCommits(string repoPath, IReadOnlyList<string> commitHashes)
     {
         return GetDiffFilesForCommitsCore(repoPath, commitHashes, committerFilter: null);
     }
 
-    private IReadOnlyList<DiffFileInfo> GetDiffFilesForCommitsCore(string repoPath, IReadOnlyList<string> commitHashes, IReadOnlyList<string>? committerFilter)
+    private (IReadOnlyList<DiffFileInfo> Files, IReadOnlyList<string> NotFoundHashes) GetDiffFilesForCommitsCore(string repoPath, IReadOnlyList<string> commitHashes, IReadOnlyList<string>? committerFilter)
     {
         using var repo = new Repository(repoPath);
 
         // Resolve each hash and pair with parent, sorted by date (oldest first)
         // Skip merge commits (multiple parents)
         var commits = new List<(Commit commit, Commit? parent)>();
+        var notFoundHashes = new List<string>();
         foreach (var hash in commitHashes)
         {
             var commit = repo.Lookup<Commit>(hash);
             if (commit == null)
-                continue; // このリポジトリに存在しないコミットはスキップ
+            {
+                notFoundHashes.Add(hash);
+                continue;
+            }
             var parents = commit.Parents.ToList();
             if (parents.Count > 1)
                 continue; // Skip merge commits
@@ -462,7 +466,7 @@ public class GitService : IGitService
             }
         }
 
-        return result.Values.ToList();
+        return (result.Values.ToList(), notFoundHashes);
     }
 
     private static ChangeStatus MapStatus(ChangeKind kind) => kind switch
