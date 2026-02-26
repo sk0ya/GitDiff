@@ -49,6 +49,22 @@ public class C0CaseService : IC0CaseService
             }
         }
 
+        // Step 4: Methods with no branches → add an entry with empty BranchCondition
+        var methodsWithBranches = new HashSet<string>(results.Select(r => $"{r.ClassName}.{r.MethodName}"));
+        foreach (var methodKey in changedMethods)
+        {
+            if (!methodsWithBranches.Contains(methodKey))
+            {
+                var dotIdx = methodKey.IndexOf('.');
+                if (dotIdx >= 0)
+                {
+                    var className = methodKey[..dotIdx];
+                    var methodName = methodKey[(dotIdx + 1)..];
+                    results.Add(new C0TestCase(className, methodName, ""));
+                }
+            }
+        }
+
         return results;
     }
 
