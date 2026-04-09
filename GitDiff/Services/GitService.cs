@@ -80,9 +80,8 @@ public class GitService : IGitService
         var committerSet = committerFilter != null
             ? new HashSet<string>(committerFilter, StringComparer.OrdinalIgnoreCase)
             : null;
-        var result = new Dictionary<string, DiffFileInfo>(StringComparer.OrdinalIgnoreCase);
+        var commitDiffs = new List<(Commit Commit, Commit? Parent, TreeChanges Changes)>();
 
-        // Analyze each commit individually and aggregate results
         foreach (var commit in repo.Commits.QueryBy(commitFilter))
         {
             if (committerSet != null && !committerSet.Contains(commit.Author.Name))
@@ -105,45 +104,10 @@ public class GitService : IGitService
                 treeDiff = repo.Diff.Compare<TreeChanges>(parents[0].Tree, commit.Tree);
             }
 
-            foreach (var change in treeDiff)
-            {
-                var status = MapStatus(change.Status);
-                var oldPath = change.OldPath != change.Path ? change.OldPath : null;
-
-                if (result.TryGetValue(change.Path, out var existing))
-                {
-                    // Aggregate: if previously Added then later Deleted → remove
-                    if (existing.Status == ChangeStatus.Added && status == ChangeStatus.Deleted)
-                    {
-                        result.Remove(change.Path);
-                        continue;
-                    }
-                    // If previously Added then later Modified → keep as Added
-                    if (existing.Status == ChangeStatus.Added && status == ChangeStatus.Modified)
-                        continue;
-                    // Otherwise update to latest status
-                    result[change.Path] = new DiffFileInfo
-                    {
-                        FilePath = change.Path,
-                        OldPath = oldPath ?? existing.OldPath,
-                        Status = status,
-                        AuthorName = commit.Author.Name
-                    };
-                }
-                else
-                {
-                    result[change.Path] = new DiffFileInfo
-                    {
-                        FilePath = change.Path,
-                        OldPath = oldPath,
-                        Status = status,
-                        AuthorName = commit.Author.Name
-                    };
-                }
-            }
+            commitDiffs.Add((commit, parents.FirstOrDefault(), treeDiff));
         }
 
-        return result.Values.ToList();
+        return AggregateDiffFiles(commitDiffs);
     }
 
     public byte[]? GetFileContent(string repoPath, string commitHash, string filePath)
@@ -399,7 +363,7 @@ public class GitService : IGitService
     {
         using var repo = new Repository(repoPath);
 
-        // Resolve each hash and pair with parent, sorted by date (oldest first)
+        // Resolve each hash and pair with parent, then sort by ancestry.
         // Skip merge commits (multiple parents)
         var commits = new List<(Commit commit, Commit? parent)>();
         var notFoundHashes = new List<string>();
@@ -417,12 +381,12 @@ public class GitService : IGitService
             var parent = parents.FirstOrDefault();
             commits.Add((commit, parent));
         }
-        commits.Sort((a, b) => a.commit.Author.When.CompareTo(b.commit.Author.When));
+        SortCommitsForAggregation(repo, commits);
 
         var committerSet = committerFilter != null
             ? new HashSet<string>(committerFilter, StringComparer.OrdinalIgnoreCase)
             : null;
-        var result = new Dictionary<string, DiffFileInfo>(StringComparer.OrdinalIgnoreCase);
+        var commitDiffs = new List<(Commit Commit, Commit? Parent, TreeChanges Changes)>();
 
         foreach (var (commit, parent) in commits)
         {
@@ -435,60 +399,238 @@ public class GitService : IGitService
             else
                 treeDiff = repo.Diff.Compare<TreeChanges>(parent.Tree, commit.Tree);
 
-            var parentHash = parent?.Sha ?? string.Empty;
+            commitDiffs.Add((commit, parent, treeDiff));
+        }
 
-            foreach (var change in treeDiff)
+        return (AggregateDiffFiles(commitDiffs), notFoundHashes);
+    }
+
+    private static IReadOnlyList<DiffFileInfo> AggregateDiffFiles(IEnumerable<(Commit Commit, Commit? Parent, TreeChanges Changes)> commitDiffs)
+    {
+        var states = new List<AggregatedFileState>();
+        var pathIndex = new Dictionary<string, AggregatedFileState>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (commit, parent, changes) in commitDiffs)
+        {
+            foreach (var change in changes)
             {
                 var status = MapStatus(change.Status);
                 var oldPath = change.OldPath != change.Path ? change.OldPath : null;
 
-                if (result.TryGetValue(change.Path, out var existing))
+                var state = ResolveAggregatedState(states, pathIndex, parent, change.Path, oldPath, status);
+                UpdateAggregatedState(state, pathIndex, commit, parent, change.Path, oldPath, status);
+            }
+        }
+
+        return states
+            .Select(BuildDiffFileInfo)
+            .Where(file => file != null)
+            .Select(file => file!)
+            .ToList();
+    }
+
+    private static AggregatedFileState ResolveAggregatedState(
+        ICollection<AggregatedFileState> states,
+        IDictionary<string, AggregatedFileState> pathIndex,
+        Commit? parent,
+        string path,
+        string? oldPath,
+        ChangeStatus status)
+    {
+        if (pathIndex.TryGetValue(path, out var state))
+            return state;
+
+        if (!string.IsNullOrEmpty(oldPath) && pathIndex.TryGetValue(oldPath, out state))
+            return state;
+
+        var basePath = status is ChangeStatus.Added or ChangeStatus.Copied
+            ? null
+            : oldPath ?? path;
+
+        state = new AggregatedFileState
+        {
+            BasePath = basePath,
+            BaseBlobId = basePath == null ? null : GetBlobId(parent, basePath),
+            BaseCommitHash = parent?.Sha ?? string.Empty,
+            LookupPath = basePath ?? oldPath ?? path
+        };
+
+        states.Add(state);
+        pathIndex[state.LookupPath] = state;
+        return state;
+    }
+
+    private static void UpdateAggregatedState(
+        AggregatedFileState state,
+        IDictionary<string, AggregatedFileState> pathIndex,
+        Commit commit,
+        Commit? parent,
+        string path,
+        string? oldPath,
+        ChangeStatus status)
+    {
+        if (!string.IsNullOrEmpty(state.LookupPath))
+            pathIndex.Remove(state.LookupPath);
+
+        if (status == ChangeStatus.Copied && !string.IsNullOrEmpty(oldPath))
+        {
+            state.SawCopy = true;
+            state.CopySourcePath ??= oldPath;
+        }
+
+        state.CurrentPath = status == ChangeStatus.Deleted ? null : path;
+        state.CurrentBlobId = status == ChangeStatus.Deleted ? null : GetBlobId(commit, path);
+        state.LookupPath = state.CurrentPath ?? oldPath ?? path;
+        state.SourceCommitHash = commit.Sha;
+        state.AuthorName = commit.Author.Name;
+
+        if (!string.IsNullOrEmpty(state.LookupPath))
+            pathIndex[state.LookupPath] = state;
+    }
+
+    private static DiffFileInfo? BuildDiffFileInfo(AggregatedFileState state)
+    {
+        var baseExists = !string.IsNullOrEmpty(state.BaseBlobId);
+        var currentExists = !string.IsNullOrEmpty(state.CurrentBlobId);
+
+        if (!baseExists && !currentExists)
+            return null;
+
+        if (!baseExists && currentExists)
+        {
+            return new DiffFileInfo
+            {
+                FilePath = state.CurrentPath ?? state.LookupPath,
+                OldPath = state.SawCopy ? state.CopySourcePath : null,
+                Status = state.SawCopy ? ChangeStatus.Copied : ChangeStatus.Added,
+                SourceCommitHash = state.SourceCommitHash,
+                BaseCommitHash = state.BaseCommitHash,
+                AuthorName = state.AuthorName
+            };
+        }
+
+        if (baseExists && !currentExists)
+        {
+            return new DiffFileInfo
+            {
+                FilePath = state.BasePath ?? state.LookupPath,
+                Status = ChangeStatus.Deleted,
+                SourceCommitHash = state.SourceCommitHash,
+                BaseCommitHash = state.BaseCommitHash,
+                AuthorName = state.AuthorName
+            };
+        }
+
+        var samePath = string.Equals(state.BasePath, state.CurrentPath, StringComparison.OrdinalIgnoreCase);
+        var sameBlob = string.Equals(state.BaseBlobId, state.CurrentBlobId, StringComparison.Ordinal);
+
+        if (samePath && sameBlob)
+            return null;
+
+        if (!samePath)
+        {
+            return new DiffFileInfo
+            {
+                FilePath = state.CurrentPath ?? state.LookupPath,
+                OldPath = state.BasePath,
+                Status = ChangeStatus.Renamed,
+                SourceCommitHash = state.SourceCommitHash,
+                BaseCommitHash = state.BaseCommitHash,
+                AuthorName = state.AuthorName
+            };
+        }
+
+        return new DiffFileInfo
+        {
+            FilePath = state.CurrentPath ?? state.LookupPath,
+            Status = ChangeStatus.Modified,
+            SourceCommitHash = state.SourceCommitHash,
+            BaseCommitHash = state.BaseCommitHash,
+            AuthorName = state.AuthorName
+        };
+    }
+
+    private static string? GetBlobId(Commit? commit, string path)
+    {
+        var entry = commit?[path];
+        return entry?.Target.Id.Sha;
+    }
+
+    private static void SortCommitsForAggregation(Repository repo, List<(Commit commit, Commit? parent)> commits)
+    {
+        var ordered = commits
+            .Select((item, index) => new OrderedCommit(item.commit, item.parent, index))
+            .ToList();
+
+        var edges = Enumerable.Range(0, ordered.Count)
+            .Select(_ => new List<int>())
+            .ToList();
+        var indegree = new int[ordered.Count];
+
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            for (var j = i + 1; j < ordered.Count; j++)
+            {
+                var relation = CompareCommitOrder(repo, ordered[i].Commit, ordered[j].Commit);
+                if (relation < 0)
                 {
-                    if (existing.Status == ChangeStatus.Added && status == ChangeStatus.Deleted)
-                    {
-                        result.Remove(change.Path);
-                        continue;
-                    }
-                    if (existing.Status == ChangeStatus.Added && status == ChangeStatus.Modified)
-                    {
-                        // Keep Added status but update source commit to latest
-                        result[change.Path] = new DiffFileInfo
-                        {
-                            FilePath = existing.FilePath,
-                            OldPath = existing.OldPath,
-                            Status = ChangeStatus.Added,
-                            SourceCommitHash = commit.Sha,
-                            BaseCommitHash = existing.BaseCommitHash,
-                            AuthorName = commit.Author.Name
-                        };
-                        continue;
-                    }
-                    result[change.Path] = new DiffFileInfo
-                    {
-                        FilePath = change.Path,
-                        OldPath = oldPath ?? existing.OldPath,
-                        Status = status,
-                        SourceCommitHash = commit.Sha,
-                        BaseCommitHash = existing.BaseCommitHash,
-                        AuthorName = commit.Author.Name
-                    };
+                    edges[i].Add(j);
+                    indegree[j]++;
                 }
-                else
+                else if (relation > 0)
                 {
-                    result[change.Path] = new DiffFileInfo
-                    {
-                        FilePath = change.Path,
-                        OldPath = oldPath,
-                        Status = status,
-                        SourceCommitHash = commit.Sha,
-                        BaseCommitHash = parentHash,
-                        AuthorName = commit.Author.Name
-                    };
+                    edges[j].Add(i);
+                    indegree[i]++;
                 }
             }
         }
 
-        return (result.Values.ToList(), notFoundHashes);
+        var queue = new PriorityQueue<int, (DateTimeOffset When, int Index)>();
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            if (indegree[i] == 0)
+                queue.Enqueue(i, (ordered[i].Commit.Author.When, ordered[i].Index));
+        }
+
+        var result = new List<(Commit commit, Commit? parent)>(ordered.Count);
+        while (queue.Count > 0)
+        {
+            var index = queue.Dequeue();
+            result.Add((ordered[index].Commit, ordered[index].Parent));
+
+            foreach (var next in edges[index])
+            {
+                indegree[next]--;
+                if (indegree[next] == 0)
+                    queue.Enqueue(next, (ordered[next].Commit.Author.When, ordered[next].Index));
+            }
+        }
+
+        if (result.Count != commits.Count)
+        {
+            var remaining = Enumerable.Range(0, ordered.Count)
+                .Where(i => indegree[i] > 0)
+                .OrderBy(i => ordered[i].Commit.Author.When)
+                .ThenBy(i => ordered[i].Index)
+                .Select(i => (ordered[i].Commit, ordered[i].Parent));
+            result.AddRange(remaining);
+        }
+
+        commits.Clear();
+        commits.AddRange(result);
+    }
+
+    private static int CompareCommitOrder(Repository repo, Commit left, Commit right)
+    {
+        if (left.Id == right.Id)
+            return 0;
+
+        var mergeBase = repo.ObjectDatabase.FindMergeBase(left, right);
+        if (mergeBase?.Id == left.Id)
+            return -1;
+        if (mergeBase?.Id == right.Id)
+            return 1;
+        return 0;
     }
 
     private static (Commit Base, Commit Target) NormalizeCommitOrder(Repository repo, Commit baseCommit, Commit targetCommit)
@@ -516,4 +658,20 @@ public class GitService : IGitService
         var remote = repo.Network.Remotes["origin"];
         return remote?.Url;
     }
+
+    private sealed class AggregatedFileState
+    {
+        public string? BasePath { get; init; }
+        public string? BaseBlobId { get; init; }
+        public string BaseCommitHash { get; init; } = string.Empty;
+        public string? CurrentPath { get; set; }
+        public string? CurrentBlobId { get; set; }
+        public string LookupPath { get; set; } = string.Empty;
+        public string SourceCommitHash { get; set; } = string.Empty;
+        public string? AuthorName { get; set; }
+        public bool SawCopy { get; set; }
+        public string? CopySourcePath { get; set; }
+    }
+
+    private sealed record OrderedCommit(Commit Commit, Commit? Parent, int Index);
 }
