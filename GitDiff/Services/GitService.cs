@@ -55,7 +55,8 @@ public class GitService : IGitService
         Repository repo, Commit baseCommit, Commit targetCommit,
         IReadOnlyList<string>? committerFilter, bool excludeMergeCommits)
     {
-        // Walk commits between base and target, oldest first
+        (baseCommit, targetCommit) = NormalizeCommitOrder(repo, baseCommit, targetCommit);
+
         var commitFilter = new CommitFilter
         {
             IncludeReachableFrom = targetCommit,
@@ -225,6 +226,8 @@ public class GitService : IGitService
 
         if (baseCommit == null || targetCommit == null)
             return [];
+
+        (baseCommit, targetCommit) = NormalizeCommitOrder(repo, baseCommit, targetCommit);
 
         var filter = new CommitFilter
         {
@@ -469,6 +472,15 @@ public class GitService : IGitService
         }
 
         return (result.Values.ToList(), notFoundHashes);
+    }
+
+    private static (Commit Base, Commit Target) NormalizeCommitOrder(Repository repo, Commit baseCommit, Commit targetCommit)
+    {
+        // Sort by ancestry, not date: rebase/cherry-pick/amend can reverse commit timestamps.
+        var mergeBase = repo.ObjectDatabase.FindMergeBase(baseCommit, targetCommit);
+        return mergeBase?.Id == targetCommit.Id
+            ? (targetCommit, baseCommit)
+            : (baseCommit, targetCommit);
     }
 
     private static ChangeStatus MapStatus(ChangeKind kind) => kind switch
