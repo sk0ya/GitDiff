@@ -7,6 +7,7 @@ namespace GitDiff.Services;
 
 public class GitService : IGitService
 {
+    private static readonly Regex HunkHeaderRegex = new(@"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@", RegexOptions.Compiled);
     public bool IsValidRepository(string path)
     {
         return Repository.IsValid(path);
@@ -181,13 +182,12 @@ public class GitService : IGitService
 
     private static IReadOnlyList<int> ParseChangedLineNumbers(string patchText)
     {
-        var changedLines = new List<int>();
-        var hunkHeaderRegex = new Regex(@"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@");
+        var changedLines = new HashSet<int>();
         var currentLine = 0;
 
         foreach (var line in patchText.Split('\n'))
         {
-            var match = hunkHeaderRegex.Match(line);
+            var match = HunkHeaderRegex.Match(line);
             if (match.Success)
             {
                 currentLine = int.Parse(match.Groups[1].Value);
@@ -203,7 +203,9 @@ public class GitService : IGitService
             }
             else if (line.StartsWith('-'))
             {
-                // Deleted line — don't increment target line number
+                // Deleted line — record the nearest target file position so the
+                // surrounding method/branch context can be identified
+                changedLines.Add(Math.Max(1, currentLine - 1));
             }
             else
             {
@@ -212,7 +214,7 @@ public class GitService : IGitService
             }
         }
 
-        return changedLines;
+        return [.. changedLines];
     }
 
     public IReadOnlyList<FileCommitInfo> GetFileCommitsBetween(string repoPath, string baseCommitHash, string targetCommitHash, string filePath)
