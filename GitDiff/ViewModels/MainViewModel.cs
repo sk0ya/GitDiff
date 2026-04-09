@@ -455,8 +455,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var csFiles = DiffFiles
-                .Where(f => f.FilePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-                            && f.Status != ChangeStatus.Deleted)
+                .Where(f => f.FilePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             if (csFiles.Count == 0)
@@ -477,16 +476,22 @@ public partial class MainViewModel : ObservableObject
                 {
                     var fileBase = file.BaseCommitHash ?? baseHash!;
                     var fileTarget = file.SourceCommitHash ?? targetHash!;
+                    var (oldLines, newLines) = _gitService.GetChangedLineNumbersDetailed(repoPath, fileBase, fileTarget, file.FilePath);
 
-                    var changedLines = _gitService.GetChangedLineNumbers(repoPath, fileBase, fileTarget, file.FilePath);
-                    if (changedLines.Count == 0) continue;
+                    var oldFilePath = file.OldPath ?? file.FilePath;
+                    var oldContentBytes = _gitService.GetFileContent(repoPath, fileBase, oldFilePath);
+                    if (oldContentBytes != null && oldLines.Count > 0)
+                    {
+                        var oldContent = Encoding.UTF8.GetString(oldContentBytes);
+                        cases.AddRange(_c0CaseService.GenerateC0Cases(oldContent, oldLines));
+                    }
 
-                    var contentBytes = _gitService.GetFileContent(repoPath, fileTarget, file.FilePath);
-                    if (contentBytes == null) continue;
-
-                    var content = Encoding.UTF8.GetString(contentBytes);
-                    var fileCases = _c0CaseService.GenerateC0Cases(content, changedLines);
-                    cases.AddRange(fileCases);
+                    var newContentBytes = _gitService.GetFileContent(repoPath, fileTarget, file.FilePath);
+                    if (newContentBytes != null && newLines.Count > 0)
+                    {
+                        var newContent = Encoding.UTF8.GetString(newContentBytes);
+                        cases.AddRange(_c0CaseService.GenerateC0Cases(newContent, newLines));
+                    }
                 }
 
                 return cases;

@@ -5,6 +5,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GitDiff", "GitDiff\GitDiff.csproj", "{31C4FCD9-88E4-43CB-A1E8-7E7B07ED844D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GitDiff.Tests", "GitDiff.Tests\GitDiff.Tests.csproj", "{87E963D9-2F88-4792-925B-89C9D6D7E901}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,18 @@ Global
 		{31C4FCD9-88E4-43CB-A1E8-7E7B07ED844D}.Release|x64.Build.0 = Release|Any CPU
 		{31C4FCD9-88E4-43CB-A1E8-7E7B07ED844D}.Release|x86.ActiveCfg = Release|Any CPU
 		{31C4FCD9-88E4-43CB-A1E8-7E7B07ED844D}.Release|x86.Build.0 = Release|Any CPU
+		{87E963D9-2F88-4792-925B-89C9D6D7E901}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{87E963D9-2F88-4792-925B-89C9D6D7E901}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{87E963D9-2F88-4792-925B-89C9D6D7E901}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{87E963D9-2F88-4792-925B-89C9D6D7E901}.Debug|x64.Build.0 = Debug|Any CPU
+		{87E963D9-2F88-4792-925B-89C9D6D7E901}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{87E963D9-2F88-4792-925B-89C9D6D7E901}.Debug|x86.Build.0 = Debug|Any CPU
+		{87E963D9-2F88-4792-925B-89C9D6D7E901}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{87E963D9-2F88-4792-925B-89C9D6D7E901}.Release|Any CPU.Build.0 = Release|Any CPU
+		{87E963D9-2F88-4792-925B-89C9D6D7E901}.Release|x64.ActiveCfg = Release|Any CPU
+		{87E963D9-2F88-4792-925B-89C9D6D7E901}.Release|x64.Build.0 = Release|Any CPU
+		{87E963D9-2F88-4792-925B-89C9D6D7E901}.Release|x86.ActiveCfg = Release|Any CPU
+		{87E963D9-2F88-4792-925B-89C9D6D7E901}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

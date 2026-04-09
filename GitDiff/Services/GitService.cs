@@ -7,7 +7,6 @@ namespace GitDiff.Services;
 
 public class GitService : IGitService
 {
-    private static readonly Regex HunkHeaderRegex = new(@"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@", RegexOptions.Compiled);
     public bool IsValidRepository(string path)
     {
         return Repository.IsValid(path);
@@ -128,20 +127,28 @@ public class GitService : IGitService
 
     public IReadOnlyList<int> GetChangedLineNumbers(string repoPath, string baseCommitHash, string targetCommitHash, string filePath)
     {
+        var (oldLines, newLines) = GetChangedLineNumbersDetailed(repoPath, baseCommitHash, targetCommitHash, filePath);
+        return oldLines.Concat(newLines).Distinct().OrderBy(x => x).ToList();
+    }
+
+    public (IReadOnlyList<int> OldLines, IReadOnlyList<int> NewLines) GetChangedLineNumbersDetailed(
+        string repoPath, string baseCommitHash, string targetCommitHash, string filePath)
+    {
         using var repo = new Repository(repoPath);
         var baseCommit = repo.Lookup<Commit>(baseCommitHash);
         var targetCommit = repo.Lookup<Commit>(targetCommitHash);
 
         if (baseCommit == null || targetCommit == null)
-            return [];
+            return ([], []);
 
         (baseCommit, targetCommit) = NormalizeCommitOrder(repo, baseCommit, targetCommit);
 
-        // For Added files, return all line numbers
         var treeEntry = targetCommit[filePath];
-        if (treeEntry == null) return [];
-
         var baseEntry = baseCommit[filePath];
+
+        if (baseEntry == null && treeEntry == null)
+            return ([], []);
+
         if (baseEntry == null)
         {
             // File is new — all lines are changed
@@ -149,52 +156,64 @@ public class GitService : IGitService
             using var reader = new StreamReader(blob.GetContentStream());
             var content = reader.ReadToEnd();
             var lineCount = content.Split('\n').Length;
-            return Enumerable.Range(1, lineCount).ToList();
+            return ([], Enumerable.Range(1, lineCount).ToList());
+        }
+
+        if (treeEntry == null)
+        {
+            // File is deleted — all old lines are changed
+            var blob = (Blob)baseEntry.Target;
+            using var reader = new StreamReader(blob.GetContentStream());
+            var content = reader.ReadToEnd();
+            var lineCount = content.Split('\n').Length;
+            return (Enumerable.Range(1, lineCount).ToList(), []);
         }
 
         // Get patch for this specific file
         var patch = repo.Diff.Compare<Patch>(baseCommit.Tree, targetCommit.Tree, [filePath]);
         var patchEntry = patch[filePath];
-        if (patchEntry == null) return [];
+        if (patchEntry == null) return ([], []);
 
-        return ParseChangedLineNumbers(patchEntry.Patch);
+        return ParseChangedLineNumbersDetailed(patchEntry.Patch);
     }
 
-    private static IReadOnlyList<int> ParseChangedLineNumbers(string patchText)
+    private static (IReadOnlyList<int> OldLines, IReadOnlyList<int> NewLines) ParseChangedLineNumbersDetailed(string patchText)
     {
-        var changedLines = new HashSet<int>();
-        var currentLine = 0;
+        var oldChangedLines = new HashSet<int>();
+        var newChangedLines = new HashSet<int>();
+        var oldLine = 0;
+        var newLine = 0;
 
         foreach (var line in patchText.Split('\n'))
         {
-            var match = HunkHeaderRegex.Match(line);
+            var match = Regex.Match(line, @"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@");
             if (match.Success)
             {
-                currentLine = int.Parse(match.Groups[1].Value);
+                oldLine = int.Parse(match.Groups[1].Value);
+                newLine = int.Parse(match.Groups[2].Value);
                 continue;
             }
 
-            if (currentLine == 0) continue;
+            if (oldLine == 0 && newLine == 0) continue;
 
             if (line.StartsWith('+'))
             {
-                changedLines.Add(currentLine);
-                currentLine++;
+                newChangedLines.Add(newLine);
+                newLine++;
             }
             else if (line.StartsWith('-'))
             {
-                // Deleted line — record the nearest target file position so the
-                // surrounding method/branch context can be identified
-                changedLines.Add(Math.Max(1, currentLine - 1));
+                oldChangedLines.Add(oldLine);
+                oldLine++;
             }
             else
             {
-                // Context line
-                currentLine++;
+                oldLine++;
+                newLine++;
             }
         }
 
-        return [.. changedLines];
+        return ([.. oldChangedLines.OrderBy(x => x)], [.. newChangedLines.OrderBy(x => x)]);
     }
 
     public IReadOnlyList<FileCommitInfo> GetFileCommitsBetween(string repoPath, string baseCommitHash, string targetCommitHash, string filePath)
