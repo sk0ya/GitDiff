@@ -7,6 +7,7 @@ public interface IGitService
     bool IsValidRepository(string path);
     IReadOnlyList<CommitInfo> GetCommits(string repoPath);
     IReadOnlyList<string> GetCommitters(string repoPath);
+    (string BaseCommitHash, string TargetCommitHash) NormalizeCommitPair(string repoPath, string firstCommitHash, string secondCommitHash);
     IReadOnlyList<DiffFileInfo> GetDiffFiles(string repoPath, string baseCommitHash, string targetCommitHash, bool excludeMergeCommits = false);
     byte[]? GetFileContent(string repoPath, string commitHash, string filePath);
     IReadOnlyList<int> GetChangedLineNumbers(string repoPath, string baseCommitHash, string targetCommitHash, string filePath);

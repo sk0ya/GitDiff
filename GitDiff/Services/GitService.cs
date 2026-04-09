@@ -38,6 +38,19 @@ public class GitService : IGitService
             .ToList();
     }
 
+    public (string BaseCommitHash, string TargetCommitHash) NormalizeCommitPair(string repoPath, string firstCommitHash, string secondCommitHash)
+    {
+        using var repo = new Repository(repoPath);
+        var firstCommit = repo.Lookup<Commit>(firstCommitHash);
+        var secondCommit = repo.Lookup<Commit>(secondCommitHash);
+
+        if (firstCommit == null || secondCommit == null)
+            return (firstCommitHash, secondCommitHash);
+
+        var (baseCommit, targetCommit) = NormalizeCommitOrder(repo, firstCommit, secondCommit);
+        return (baseCommit.Sha, targetCommit.Sha);
+    }
+
     public IReadOnlyList<DiffFileInfo> GetDiffFiles(string repoPath, string baseCommitHash, string targetCommitHash, bool excludeMergeCommits = false)
     {
         using var repo = new Repository(repoPath);
@@ -157,6 +170,8 @@ public class GitService : IGitService
 
         if (baseCommit == null || targetCommit == null)
             return [];
+
+        (baseCommit, targetCommit) = NormalizeCommitOrder(repo, baseCommit, targetCommit);
 
         // For Added files, return all line numbers
         var treeEntry = targetCommit[filePath];
@@ -282,6 +297,8 @@ public class GitService : IGitService
 
         if (oldCommit == null || newCommit == null)
             return new FileDiffResult();
+
+        (oldCommit, newCommit) = NormalizeCommitOrder(repo, oldCommit, newCommit);
 
         var patch = repo.Diff.Compare<Patch>(oldCommit.Tree, newCommit.Tree);
 

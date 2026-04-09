@@ -128,9 +128,12 @@ public partial class MainWindow : Window
 
         if (_selectionOrder.Count == 2)
         {
-            var commits = _selectionOrder.OrderByDescending(c => c.Date).ToList();
-            vm.BaseCommit = commits[1];  // older
-            vm.TargetCommit = commits[0]; // newer
+            var first = _selectionOrder[0];
+            var second = _selectionOrder[1];
+            var (baseHash, targetHash) = vm.GitService.NormalizeCommitPair(vm.RepositoryPath, first.Hash, second.Hash);
+
+            vm.BaseCommit = first.Hash == baseHash ? first : second;
+            vm.TargetCommit = first.Hash == targetHash ? first : second;
         }
         else
         {
